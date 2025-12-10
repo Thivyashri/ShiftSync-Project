@@ -39,6 +39,8 @@ function App() {
           <Route path="/driver-dashboard" element={<DriverDashboard />} />
 
           <Route path="*" element={<div>404 - Page not found</div>} />
+          <Route path="/driver/reset-password" element={<ResetPassword />} />
+
         </Routes>
       </main>
     </div>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 export default function Signin() {
   const navigate = useNavigate();
@@ -8,44 +9,67 @@ export default function Signin() {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
-    
-    // Navigate based on selected role
-    if (role === "ADMIN") {
-      navigate("/admin");
-    } else {
-      navigate("/driver-dashboard");
+    setError("");
+
+    try {
+      const response = await axios.post("http://localhost:5028/api/auth/login", {
+        username,
+        password
+      });
+
+      const { token, user } = response.data;
+
+      // Save token & details
+      localStorage.setItem("token", token);
+      localStorage.setItem("role", user.role);
+      localStorage.setItem("userId", user.id);
+
+      // Attach token to axios globally
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+      // Redirect based on actual backend user role
+      if (user.role === "ADMIN") {
+        navigate("/admin");
+      } else if (user.role === "DRIVER") {
+        navigate("/driver-dashboard");
+      } else {
+        setError("Unknown role returned by server.");
+      }
+
+    } catch (err) {
+      setError("Invalid username or password");
     }
   }
 
   return (
     <div className="ss-page-root">
       <div className="ss-center-wrap">
+        
         <header className="ss-header">
           <img
             src="src/assets/truck.png"
             alt="truck"
             className="ss-truck-inline"
-            onError={(e) => (e.currentTarget.style.display = "none")}
           />
           <h1 className="ss-title-inline">ShiftSync</h1>
         </header>
 
         <div className="ss-tabs-wrap">
-          <div className="ss-tabs" role="tablist" aria-label="role tabs">
+          <div className="ss-tabs" role="tablist">
             <button
               className={`ss-tab ${role === "DRIVER" ? "ss-tab-active" : ""}`}
               onClick={() => setRole("DRIVER")}
-              aria-pressed={role === "DRIVER"}
             >
               DRIVER
             </button>
+
             <button
               className={`ss-tab ${role === "ADMIN" ? "ss-tab-active" : ""}`}
               onClick={() => setRole("ADMIN")}
-              aria-pressed={role === "ADMIN"}
             >
               ADMIN
             </button>
@@ -53,14 +77,17 @@ export default function Signin() {
         </div>
 
         <form className="ss-form" onSubmit={handleLogin}>
+          {error && <p style={{ color: "red" }}>{error}</p>}
+
           <div className="ss-field">
             <input
               className="ss-input"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              aria-label="username"
+              placeholder={
+                role === "ADMIN" ? "Username or Email" : "Phone or Email"
+              }
             />
           </div>
 
@@ -71,23 +98,14 @@ export default function Signin() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
-              aria-label="password"
             />
+
             <button
               type="button"
               className="ss-eye-btn"
               onClick={() => setShowPassword((s) => !s)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" className="ss-eye-icon" aria-hidden>
-                  <path d="M3 3l18 18M9.88 9.88A3 3 0 0114.12 14.12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" className="ss-eye-icon" aria-hidden>
-                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12zm11-3a3 3 0 110 6 3 3 0 010-6z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
-              )}
+              {showPassword ? "🙈" : "👁️"}
             </button>
           </div>
 
@@ -99,12 +117,14 @@ export default function Signin() {
             />
             <span>Remember Me</span>
           </label>
+
           <div className="ss-login-wrap">
-            <button type="submit" className="ss-login-btn" aria-label="Login">
+            <button type="submit" className="ss-login-btn">
               LOGIN
             </button>
           </div>
         </form>
+
       </div>
     </div>
   );
