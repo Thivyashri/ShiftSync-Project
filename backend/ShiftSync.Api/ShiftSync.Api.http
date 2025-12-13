@@ -1,0 +1,6 @@
+@ShiftSync.Api_HostAddress = http://localhost:5028
+
+GET {{ShiftSync.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
