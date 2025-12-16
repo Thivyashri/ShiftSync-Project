@@ -11,9 +11,88 @@ export default function Signin() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
+  // Validation errors
+  const [validationErrors, setValidationErrors] = useState({
+    username: "",
+    password: ""
+  });
+
+  // Validation functions
+  const validateUsername = (value) => {
+    if (!value || value.trim() === "") {
+      return "Username/phone/email is required";
+    }
+
+    // Check if it looks like an email
+    const hasAtSymbol = value.includes("@");
+    
+    if (hasAtSymbol) {
+      // Email validation: must contain @ and .com
+      if (!value.includes(".com")) {
+        return "Email must contain @ and .com";
+      }
+    } else {
+      // Phone number validation: must be exactly 10 digits
+      if (!/^\d{10}$/.test(value.trim())) {
+        return "Phone must be exactly 10 digits";
+      }
+    }
+
+    return "";
+  };
+
+  const validatePassword = (value) => {
+    if (!value || value.trim() === "") {
+      return "Password is required";
+    }
+    return "";
+  };
+
+  const handleUsernameChange = (e) => {
+    const value = e.target.value;
+    setUsername(value);
+    setValidationErrors(prev => ({ ...prev, username: "" }));
+  };
+
+  const handleUsernameBlur = () => {
+    setValidationErrors(prev => ({ 
+      ...prev, 
+      username: validateUsername(username) 
+    }));
+  };
+
+  const handlePasswordChange = (e) => {
+    const value = e.target.value;
+    setPassword(value);
+    setValidationErrors(prev => ({ ...prev, password: "" }));
+  };
+
+  const handlePasswordBlur = () => {
+    setValidationErrors(prev => ({ 
+      ...prev, 
+      password: validatePassword(password) 
+    }));
+  };
+
+  const validateForm = () => {
+    const errors = {
+      username: validateUsername(username),
+      password: validatePassword(password)
+    };
+
+    setValidationErrors(errors);
+
+    return !Object.values(errors).some(error => error !== "");
+  };
+
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
+
+    // Validate form before submitting
+    if (!validateForm()) {
+      return;
+    }
 
     try {
       const response = await axios.post("http://localhost:5028/api/auth/login", {
@@ -89,18 +168,32 @@ export default function Signin() {
         </div>
 
         <form className="ss-form" onSubmit={handleLogin}>
-          {error && <p style={{ color: "red" }}>{error}</p>}
+          {error && <p style={{ color: "red", marginBottom: "16px" }}>{error}</p>}
 
           <div className="ss-field">
             <input
               className="ss-input"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={handleUsernameChange}
+              onBlur={handleUsernameBlur}
               placeholder={
                 role === "ADMIN" ? "Username or Email" : "Phone or Email"
               }
+              style={{
+                borderColor: validationErrors.username ? "#dc2626" : undefined
+              }}
             />
+            {validationErrors.username && (
+              <span style={{ 
+                color: '#dc2626', 
+                fontSize: '12px', 
+                marginTop: '4px', 
+                display: 'block' 
+              }}>
+                {validationErrors.username}
+              </span>
+            )}
           </div>
 
           <div className="ss-field ss-password-field">
@@ -108,8 +201,12 @@ export default function Signin() {
               className="ss-input"
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={handlePasswordChange}
+              onBlur={handlePasswordBlur}
               placeholder="Enter your password"
+              style={{
+                borderColor: validationErrors.password ? "#dc2626" : undefined
+              }}
             />
 
             <button
@@ -119,6 +216,20 @@ export default function Signin() {
             >
               {showPassword ? "🙈" : "👁️"}
             </button>
+            
+            {validationErrors.password && (
+              <span style={{ 
+                color: '#dc2626', 
+                fontSize: '12px', 
+                marginTop: '4px', 
+                display: 'block',
+                position: 'absolute',
+                bottom: '-20px',
+                left: 0
+              }}>
+                {validationErrors.password}
+              </span>
+            )}
           </div>
 
           <label className="ss-remember">

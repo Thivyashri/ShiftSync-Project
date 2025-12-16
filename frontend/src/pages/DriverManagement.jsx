@@ -54,6 +54,17 @@ function DriverManagement() {
     password: ""
   });
 
+  // Validation errors state
+  const [validationErrors, setValidationErrors] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    region: "",
+    vehicleType: "",
+    weeklyOff: "",
+    password: ""
+  });
+
   // Fetch data on mount and filter changes
   useEffect(() => {
     fetchDrivers();
@@ -122,14 +133,101 @@ function DriverManagement() {
     setFilters({ region: "", status: "", search: "" });
   };
 
+  // Validation functions
+  const validateField = (name, value) => {
+    let errorMsg = "";
+
+    switch (name) {
+      case "name":
+        if (!value.trim()) {
+          errorMsg = "Name is required";
+        }
+        break;
+
+      case "phone":
+        if (!value.trim()) {
+          errorMsg = "Phone is required";
+        } else if (!/^\d{10}$/.test(value.trim())) {
+          errorMsg = "Phone must be exactly 10 digits";
+        }
+        break;
+
+      case "email":
+        if (!value.trim()) {
+          errorMsg = "Email is required";
+        } else if (!value.includes("@") || !value.includes(".com")) {
+          errorMsg = "Email must contain @ and .com";
+        }
+        break;
+
+      case "region":
+        if (!value) {
+          errorMsg = "Region is required";
+        }
+        break;
+
+      case "vehicleType":
+        if (!value) {
+          errorMsg = "Vehicle type is required";
+        }
+        break;
+
+      case "weeklyOff":
+        if (!value) {
+          errorMsg = "Weekly off is required";
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    return errorMsg;
+  };
+
+  const validateForm = () => {
+    const errors = {
+      name: validateField("name", formData.name),
+      phone: validateField("phone", formData.phone),
+      email: validateField("email", formData.email),
+      region: validateField("region", formData.region),
+      vehicleType: validateField("vehicleType", formData.vehicleType),
+      weeklyOff: validateField("weeklyOff", formData.weeklyOff),
+      password: ""
+    };
+
+    setValidationErrors(errors);
+
+    // Return true if no errors
+    return !Object.values(errors).some(error => error !== "");
+  };
+
   // Form handlers
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+
+    // Clear validation error for this field when user types
+    setValidationErrors(prev => ({ ...prev, [name]: "" }));
+  };
+
+  const handleInputBlur = (e) => {
+    const { name, value } = e.target;
+    const errorMsg = validateField(name, value);
+    setValidationErrors(prev => ({ ...prev, [name]: errorMsg }));
   };
 
   const resetForm = () => {
     setFormData({
+      name: "",
+      phone: "",
+      email: "",
+      region: "",
+      vehicleType: "",
+      weeklyOff: "",
+      password: ""
+    });
+    setValidationErrors({
       name: "",
       phone: "",
       email: "",
@@ -143,6 +241,12 @@ function DriverManagement() {
   // CRUD Operations
   const handleAddDriver = async (e) => {
     e.preventDefault();
+
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
     try {
       await createDriver(formData);
       setShowAddModal(false);
@@ -157,6 +261,12 @@ function DriverManagement() {
 
   const handleEditDriver = async (e) => {
     e.preventDefault();
+
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
     try {
       await updateDriver(selectedDriver.driverId, formData);
       setShowEditModal(false);
@@ -207,6 +317,15 @@ function DriverManagement() {
       weeklyOff: driver.weeklyOff,
       password: ""
     });
+    setValidationErrors({
+      name: "",
+      phone: "",
+      email: "",
+      region: "",
+      vehicleType: "",
+      weeklyOff: "",
+      password: ""
+    });
     setShowEditModal(true);
   };
 
@@ -222,18 +341,19 @@ function DriverManagement() {
 
     try {
       const response = await uploadDriverCsv(file);
-      //alert(response.data.message);
       
       if (response.data.errors?.length > 0) {
         console.warn("CSV Errors:", response.data.errors);
+        alert(`CSV uploaded with ${response.data.errors.length} errors. Check console for details.`);
       }
       if (response.data.duplicates?.length > 0) {
         console.warn("Duplicates:", response.data.duplicates);
+        alert(`${response.data.duplicates.length} duplicate entries found and skipped.`);
       }
       
       fetchDrivers();
       fetchStats();
-      e.target.value = ''; // Reset input
+      e.target.value = '';
     } catch (err) {
       alert(err.response?.data?.message || "Failed to upload CSV");
     }
@@ -294,7 +414,6 @@ function DriverManagement() {
       {/* Filters */}
       <section className="card filters-card">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-          {/* Region Filter */}
           <div>
             <label style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>Region</label>
             <select 
@@ -311,7 +430,6 @@ function DriverManagement() {
             </select>
           </div>
 
-          {/* Status Filter */}
           <div>
             <label style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>Status</label>
             <select 
@@ -325,23 +443,6 @@ function DriverManagement() {
             </select>
           </div>
 
-          {/* Search
-          <div>
-            <label style={{ display: "block", marginBottom: "8px", fontSize: "14px" }}>Search</label>
-            <div style={{ position: "relative" }}>
-              <FiSearch style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6b7280" }} />
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Search by name or phone..."
-                value={filters.search}
-                onChange={(e) => handleFilterChange("search", e.target.value)}
-                style={{ paddingLeft: "40px" }}
-              />
-            </div>
-          </div> */}
-
-          {/* Clear Filters */}
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <button 
               type="button" 
@@ -446,31 +547,49 @@ function DriverManagement() {
                   className="form-input"
                   value={formData.name}
                   onChange={handleInputChange}
-                  required
+                  onBlur={handleInputBlur}
                 />
+                {validationErrors.name && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.name}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
                 <label>Phone *</label>
                 <input
-                  type="tel"
+                  type="text"
                   name="phone"
                   className="form-input"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  required
+                  onBlur={handleInputBlur}
+                  placeholder="10 digits"
                 />
+                {validationErrors.phone && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.phone}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Email</label>
+                <label>Email *</label>
                 <input
-                  type="email"
+                  type="text"
                   name="email"
                   className="form-input"
                   value={formData.email}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
+                  placeholder="example@domain.com"
                 />
+                {validationErrors.email && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.email}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -480,7 +599,7 @@ function DriverManagement() {
                   className="form-select"
                   value={formData.region}
                   onChange={handleInputChange}
-                  required
+                  onBlur={handleInputBlur}
                 >
                   <option value="">Select Region</option>
                   {regions.map((region) => (
@@ -489,6 +608,11 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.region && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.region}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -498,7 +622,7 @@ function DriverManagement() {
                   className="form-select"
                   value={formData.vehicleType}
                   onChange={handleInputChange}
-                  required
+                  onBlur={handleInputBlur}
                 >
                   <option value="">Select Vehicle Type</option>
                   {vehicleTypes.map((type) => (
@@ -507,6 +631,11 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.vehicleType && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.vehicleType}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
@@ -516,7 +645,7 @@ function DriverManagement() {
                   className="form-select"
                   value={formData.weeklyOff}
                   onChange={handleInputChange}
-                  required
+                  onBlur={handleInputBlur}
                 >
                   <option value="">Select Weekly Off</option>
                   {weeklyOffs.map((day) => (
@@ -525,6 +654,11 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.weeklyOff && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.weeklyOff}
+                  </span>
+                )}
               </div>
 
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
@@ -558,45 +692,66 @@ function DriverManagement() {
           <form onSubmit={handleEditDriver}>
             <div className="form-grid">
               <div className="form-group">
-                <label>Name</label>
+                <label>Name *</label>
                 <input
                   type="text"
                   name="name"
                   className="form-input"
                   value={formData.name}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                 />
+                {validationErrors.name && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.name}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Phone</label>
+                <label>Phone *</label>
                 <input
-                  type="tel"
+                  type="text"
                   name="phone"
                   className="form-input"
                   value={formData.phone}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
+                  placeholder="10 digits"
                 />
+                {validationErrors.phone && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.phone}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Email</label>
+                <label>Email *</label>
                 <input
-                  type="email"
+                  type="text"
                   name="email"
                   className="form-input"
                   value={formData.email}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
+                  placeholder="example@domain.com"
                 />
+                {validationErrors.email && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.email}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Region</label>
+                <label>Region *</label>
                 <select
                   name="region"
                   className="form-select"
                   value={formData.region}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                 >
                   {regions.map((region) => (
                     <option key={region} value={region}>
@@ -604,15 +759,21 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.region && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.region}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Vehicle Type</label>
+                <label>Vehicle Type *</label>
                 <select
                   name="vehicleType"
                   className="form-select"
                   value={formData.vehicleType}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                 >
                   {vehicleTypes.map((type) => (
                     <option key={type} value={type}>
@@ -620,15 +781,21 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.vehicleType && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.vehicleType}
+                  </span>
+                )}
               </div>
 
               <div className="form-group">
-                <label>Weekly Off</label>
+                <label>Weekly Off *</label>
                 <select
                   name="weeklyOff"
                   className="form-select"
                   value={formData.weeklyOff}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                 >
                   {weeklyOffs.map((day) => (
                     <option key={day} value={day}>
@@ -636,6 +803,11 @@ function DriverManagement() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.weeklyOff && (
+                  <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                    {validationErrors.weeklyOff}
+                  </span>
+                )}
               </div>
             </div>
 

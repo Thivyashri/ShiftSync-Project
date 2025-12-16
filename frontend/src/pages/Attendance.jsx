@@ -1,5 +1,5 @@
 // src/pages/Attendance.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FiCheckCircle,
   FiXCircle,
@@ -12,7 +12,6 @@ import { StatusBadge } from "../components/Badges";
 import { getAttendance, getAttendanceStats } from "../services/attendanceService";
 
 const STATUS_OPTIONS = ["All", "Present", "Absent", "Late", "Missing Checkout"];
-const REGION_OPTIONS = ["All", "North", "South", "East", "West"]; // adjust to your regions
 
 function formatTime(value) {
   if (!value) return "-";
@@ -59,6 +58,19 @@ function Attendance() {
     loadData();
   }, []);
 
+  // Build region options from data
+  const regionOptions = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        rows
+          .map((r) => (r.region || "").trim())
+          .filter((v) => v.length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["All", ...unique];
+  }, [rows]);
+
   const filteredRows = rows.filter((r) => {
     if (region !== "All" && r.region !== region) return false;
     if (statusFilter !== "All" && r.status !== statusFilter) return false;
@@ -80,7 +92,7 @@ function Attendance() {
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
               >
-                {REGION_OPTIONS.map((reg) => (
+                {regionOptions.map((reg) => (
                   <option key={reg} value={reg}>
                     {reg}
                   </option>
@@ -171,11 +183,14 @@ function Attendance() {
                       <td>{record.driverName}</td>
                       <td>{record.region}</td>
                       <td>
-                        {new Date(record.date).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {new Date(record.date).toLocaleDateString(
+                          undefined,
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          }
+                        )}
                       </td>
                       <td
                         style={
@@ -187,7 +202,12 @@ function Attendance() {
                         {formatTime(record.checkInTime)}
                       </td>
                       <td>{formatTime(record.checkOutTime)}</td>
-                      <td>{computeHours(record.checkInTime, record.checkOutTime)}</td>
+                      <td>
+                        {computeHours(
+                          record.checkInTime,
+                          record.checkOutTime
+                        )}
+                      </td>
                       <td>
                         <StatusBadge
                           label={record.status}
