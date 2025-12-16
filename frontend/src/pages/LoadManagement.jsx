@@ -86,7 +86,7 @@ function Modal({ title, children, onClose }) {
     >
       <div
         className="card"
-        style={{ width: "min(560px, 100%)", padding: 16 }}
+        style={{ width: "min(560px, 100%)", padding: 16, maxHeight: "90vh", overflowY: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -103,7 +103,7 @@ function Modal({ title, children, onClose }) {
 
 // =================== MAIN COMPONENT =================== //
 function LoadManagement() {
-  // Filters - Default to "All" to show all loads
+  // Filters
   const [dateFilter, setDateFilter] = useState("All");
   const [regionFilter, setRegionFilter] = useState("All Regions");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
@@ -122,9 +122,10 @@ function LoadManagement() {
   const [showEdit, setShowEdit] = useState(false);
   const [selectedLoad, setSelectedLoad] = useState(null);
 
-  // Upload modal states ✅ (MUST be inside component)
+  // Upload modal states
   const [showUpload, setShowUpload] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
+  const [uploadErrors, setUploadErrors] = useState([]);
 
   // Form (Add/Edit)
   const [form, setForm] = useState({
@@ -133,6 +134,14 @@ function LoadManagement() {
     estimatedHours: "",
     estimatedDistance: "",
     priority: "MEDIUM",
+  });
+
+  // Validation errors
+  const [validationErrors, setValidationErrors] = useState({
+    region: "",
+    stops: "",
+    estimatedDistance: "",
+    priority: ""
   });
 
   // Dropdown options
@@ -144,7 +153,7 @@ function LoadManagement() {
     []
   );
 
-  // ✅ Dynamic region options (unique areas from table)
+  // Dynamic region options
   const regionOptions = useMemo(() => {
     const uniqueAreas = Array.from(
       new Set(
@@ -177,6 +186,64 @@ function LoadManagement() {
     ],
     []
   );
+
+  // ---------- Validation Functions ----------
+  const validateField = (name, value) => {
+    let errorMsg = "";
+
+    switch (name) {
+      case "region":
+        if (!value.trim()) {
+          errorMsg = "Region is required";
+        }
+        break;
+
+      case "stops":
+        if (!value || Number(value) <= 0 || !Number.isInteger(Number(value))) {
+          errorMsg = "Stops must be a positive integer";
+        }
+        break;
+
+      case "estimatedDistance":
+        if (!value || Number(value) <= 0) {
+          errorMsg = "Distance must be a positive number";
+        }
+        break;
+
+      case "priority":
+        if (!value) {
+          errorMsg = "Priority is required";
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    return errorMsg;
+  };
+
+  const validateForm = () => {
+    const errors = {
+      region: validateField("region", form.region),
+      stops: validateField("stops", form.stops),
+      estimatedDistance: validateField("estimatedDistance", form.estimatedDistance),
+      priority: validateField("priority", form.priority)
+    };
+
+    setValidationErrors(errors);
+    return !Object.values(errors).some(error => error !== "");
+  };
+
+  const handleFieldChange = (name, value) => {
+    setForm(f => ({ ...f, [name]: value }));
+    setValidationErrors(prev => ({ ...prev, [name]: "" }));
+  };
+
+  const handleFieldBlur = (name, value) => {
+    const errorMsg = validateField(name, value);
+    setValidationErrors(prev => ({ ...prev, [name]: errorMsg }));
+  };
 
   // ---------- Helpers ----------
   const buildQueryParams = () => {
@@ -243,8 +310,7 @@ function LoadManagement() {
 
       const [loadsRes, statsRes] = await Promise.all([
         fetch(`${API_BASE}/Loads${query ? `?${query}` : ""}`),
-        fetch(`${API_BASE}/Loads/stats?${query}`)
-,
+        fetch(`${API_BASE}/Loads/stats?${query}`),
       ]);
 
       if (!loadsRes.ok) throw new Error((await loadsRes.text()) || "Failed to load loads");
@@ -265,7 +331,6 @@ function LoadManagement() {
 
   useEffect(() => {
     fetchLoadsAndStats();
-    // eslint-disable-next-line
   }, [dateFilter, regionFilter, statusFilter]);
 
   // ---------- Actions ----------
@@ -277,17 +342,23 @@ function LoadManagement() {
       estimatedDistance: "",
       priority: "MEDIUM",
     });
+    setValidationErrors({
+      region: "",
+      stops: "",
+      estimatedDistance: "",
+      priority: ""
+    });
     setShowAdd(true);
   };
 
   const onCreateLoad = async () => {
     setError("");
-    try {
-      if (!form.region.trim()) throw new Error("Region is required");
-      if (Number(form.stops) <= 0) throw new Error("Packages/Stops must be > 0");
-      if (Number(form.estimatedHours) <= 0) throw new Error("Estimated Hours must be > 0");
-      if (Number(form.estimatedDistance) <= 0) throw new Error("Distance must be > 0");
+    
+    if (!validateForm()) {
+      return;
+    }
 
+    try {
       const res = await fetch(`${API_BASE}/Loads`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -324,14 +395,24 @@ function LoadManagement() {
       estimatedDistance: row.estimatedDistance,
       priority: row.priority ?? "MEDIUM",
     });
+    setValidationErrors({
+      region: "",
+      stops: "",
+      estimatedDistance: "",
+      priority: ""
+    });
     setShowEdit(true);
   };
 
   const onEditSave = async () => {
     setError("");
+    
+    if (!validateForm()) {
+      return;
+    }
+
     try {
       if (!selectedLoad) return;
-      if (!form.region.trim()) throw new Error("Region is required");
 
       const res = await fetch(`${API_BASE}/Loads/${selectedLoad.loadId}`, {
         method: "PUT",
@@ -390,9 +471,8 @@ function LoadManagement() {
     const iStops = idx("stops");
     const iDist = idx("estimatedDistance");
     const iPriority = idx("priority");
-    const iHours = idx("estimatedHours"); // optional
+    const iHours = idx("estimatedHours");
 
-    // handle possible camelcase vs lowercase in header
     const iDist2 = iDist === -1 ? idx("estimateddistance") : iDist;
     const iHours2 = iHours === -1 ? idx("estimatedhours") : iHours;
 
@@ -400,9 +480,11 @@ function LoadManagement() {
       throw new Error("CSV header must include: region,stops,estimatedDistance,priority");
     }
 
-    const AVG_SPEED = 20; // Chennai traffic avg speed
+    const AVG_SPEED = 20;
+    const validRows = [];
+    const invalidRows = [];
 
-    const rows = lines.slice(1).map((line) => {
+    lines.slice(1).forEach((line, lineIndex) => {
       const cols = line.split(",").map((c) => c.trim());
 
       const region = cols[iRegion];
@@ -415,31 +497,56 @@ function LoadManagement() {
           ? Number(cols[iHours2])
           : Number((estimatedDistance / AVG_SPEED).toFixed(1));
 
-      return { region, stops, estimatedDistance, estimatedHours, priority };
+      // Validate row
+      if (!region || !region.trim()) {
+        invalidRows.push({ line: lineIndex + 2, reason: "Region is empty" });
+      } else if (stops <= 0 || !Number.isInteger(stops)) {
+        invalidRows.push({ line: lineIndex + 2, reason: "Stops must be positive integer" });
+      } else if (estimatedDistance <= 0) {
+        invalidRows.push({ line: lineIndex + 2, reason: "Distance must be positive" });
+      } else if (!["HIGH", "MEDIUM", "LOW"].includes(priority)) {
+        invalidRows.push({ line: lineIndex + 2, reason: "Invalid priority" });
+      } else {
+        validRows.push({ region, stops, estimatedDistance, estimatedHours, priority });
+      }
     });
 
-    return rows.filter((r) => r.region && r.stops > 0 && r.estimatedDistance > 0);
+    return { validRows, invalidRows };
   };
 
   const uploadLoads = async () => {
     try {
       setError("");
+      setUploadErrors([]);
+      
       if (!uploadFile) throw new Error("Please select a CSV file");
 
-      const loadsToUpload = await parseCSV(uploadFile);
-      if (loadsToUpload.length === 0) throw new Error("No valid rows found in CSV");
+      const { validRows, invalidRows } = await parseCSV(uploadFile);
+      
+      if (invalidRows.length > 0) {
+        setUploadErrors(invalidRows);
+      }
+
+      if (validRows.length === 0) {
+        throw new Error("No valid rows found in CSV");
+      }
 
       const res = await fetch(`${API_BASE}/Loads/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loadsToUpload),
+        body: JSON.stringify(validRows),
       });
 
       if (!res.ok) throw new Error((await res.text()) || "Bulk upload failed");
 
       setShowUpload(false);
       setUploadFile(null);
+      setUploadErrors([]);
       await fetchLoadsAndStats();
+      
+      if (invalidRows.length > 0) {
+        alert(`Upload completed with ${invalidRows.length} invalid rows skipped. Check modal for details.`);
+      }
     } catch (e) {
       setError(e.message || "Bulk upload failed");
     }
@@ -467,7 +574,7 @@ function LoadManagement() {
       />
 
       {error && (
-        <section className="card" style={{ padding: 12, borderLeft: "4px solid #ef4444" }}>
+        <section className="card" style={{ padding: 12, borderLeft: "4px solid #ef4444", marginBottom: 16 }}>
           <div style={{ color: "#b91c1c", fontWeight: 600 }}>Error</div>
           <div style={{ color: "#7f1d1d" }}>{error}</div>
         </section>
@@ -548,7 +655,12 @@ function LoadManagement() {
       {/* ADD MODAL */}
       {showAdd && (
         <Modal title="Add Load" onClose={() => setShowAdd(false)}>
-          <LoadForm form={form} setForm={setForm} />
+          <LoadForm 
+            form={form} 
+            setForm={handleFieldChange}
+            onBlur={handleFieldBlur}
+            errors={validationErrors}
+          />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
             <button className="action-link" onClick={() => setShowAdd(false)}>Cancel</button>
             <button className="btn-primary" onClick={onCreateLoad}>Create</button>
@@ -574,7 +686,12 @@ function LoadManagement() {
       {/* EDIT MODAL */}
       {showEdit && selectedLoad && (
         <Modal title={`Edit Load - ${selectedLoad.loadRef || selectedLoad.id}`} onClose={() => setShowEdit(false)}>
-          <LoadForm form={form} setForm={setForm} />
+          <LoadForm 
+            form={form} 
+            setForm={handleFieldChange}
+            onBlur={handleFieldBlur}
+            errors={validationErrors}
+          />
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
             <button className="action-link" onClick={() => setShowEdit(false)}>Cancel</button>
             <button className="btn-primary" onClick={onEditSave}>Save</button>
@@ -582,9 +699,9 @@ function LoadManagement() {
         </Modal>
       )}
 
-      {/* ✅ UPLOAD MODAL */}
+      {/* UPLOAD MODAL */}
       {showUpload && (
-        <Modal title="Upload Loads (CSV)" onClose={() => setShowUpload(false)}>
+        <Modal title="Upload Loads (CSV)" onClose={() => { setShowUpload(false); setUploadErrors([]); }}>
           <div style={{ display: "grid", gap: 10 }}>
             <input
               type="file"
@@ -597,8 +714,28 @@ function LoadManagement() {
               Optional: <b>estimatedHours</b> (if missing → auto-calculated using Chennai traffic)
             </div>
 
+            {uploadErrors.length > 0 && (
+              <div style={{ 
+                padding: 12, 
+                background: "#fef2f2", 
+                border: "1px solid #fecaca", 
+                borderRadius: 8,
+                maxHeight: 200,
+                overflowY: "auto"
+              }}>
+                <div style={{ fontWeight: 600, color: "#991b1b", marginBottom: 8 }}>
+                  Invalid Rows ({uploadErrors.length}):
+                </div>
+                {uploadErrors.map((err, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "#7f1d1d" }}>
+                    Line {err.line}: {err.reason}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="action-link" onClick={() => setShowUpload(false)}>Cancel</button>
+              <button className="action-link" onClick={() => { setShowUpload(false); setUploadErrors([]); }}>Cancel</button>
               <button className="btn-primary" onClick={uploadLoads}>Upload</button>
             </div>
           </div>
@@ -618,33 +755,41 @@ function StatCard({ title, value }) {
   );
 }
 
-function LoadForm({ form, setForm }) {
+function LoadForm({ form, setForm, onBlur, errors }) {
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gap: 6 }}>
-        <label style={{ fontSize: 12, color: "#6b7280" }}>Region</label>
+        <label style={{ fontSize: 12, color: "#6b7280" }}>Region *</label>
         <input
           type="text"
           value={form.region}
-          onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}
+          onChange={(e) => setForm("region", e.target.value)}
+          onBlur={(e) => onBlur("region", e.target.value)}
           placeholder="Enter region (ex: Porur / Anna Nagar / Tambaram)"
           style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
         />
+        {errors.region && (
+          <span style={{ color: "#dc2626", fontSize: "11px" }}>{errors.region}</span>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: 6 }}>
-        <label style={{ fontSize: 12, color: "#6b7280" }}>Packages (Stops)</label>
+        <label style={{ fontSize: 12, color: "#6b7280" }}>Packages (Stops) *</label>
         <input
           type="number"
           min="1"
           value={form.stops}
-          onChange={(e) => setForm((f) => ({ ...f, stops: e.target.value }))}
+          onChange={(e) => setForm("stops", e.target.value)}
+          onBlur={(e) => onBlur("stops", e.target.value)}
           style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
         />
+        {errors.stops && (
+          <span style={{ color: "#dc2626", fontSize: "11px" }}>{errors.stops}</span>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: 6 }}>
-        <label style={{ fontSize: 12, color: "#6b7280" }}>Estimated Distance (km)</label>
+        <label style={{ fontSize: 12, color: "#6b7280" }}>Estimated Distance (km) *</label>
         <input
           type="number"
           min="0.1"
@@ -654,11 +799,16 @@ function LoadForm({ form, setForm }) {
             const distance = e.target.value;
             const AVG_SPEED_KMH = 20;
             const hrs = distance && Number(distance) > 0 ? (Number(distance) / AVG_SPEED_KMH).toFixed(1) : "";
-            setForm((f) => ({ ...f, estimatedDistance: distance, estimatedHours: hrs }));
+            setForm("estimatedDistance", distance);
+            setForm("estimatedHours", hrs);
           }}
+          onBlur={(e) => onBlur("estimatedDistance", e.target.value)}
           placeholder="Enter distance in km"
           style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
         />
+        {errors.estimatedDistance && (
+          <span style={{ color: "#dc2626", fontSize: "11px" }}>{errors.estimatedDistance}</span>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: 6 }}>
@@ -679,16 +829,20 @@ function LoadForm({ form, setForm }) {
       </div>
 
       <div style={{ display: "grid", gap: 6 }}>
-        <label style={{ fontSize: 12, color: "#6b7280" }}>Priority</label>
+        <label style={{ fontSize: 12, color: "#6b7280" }}>Priority *</label>
         <select
           value={form.priority}
-          onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+          onChange={(e) => setForm("priority", e.target.value)}
+          onBlur={(e) => onBlur("priority", e.target.value)}
           style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
         >
           <option value="HIGH">High</option>
           <option value="MEDIUM">Medium</option>
           <option value="LOW">Low</option>
         </select>
+        {errors.priority && (
+          <span style={{ color: "#dc2626", fontSize: "11px" }}>{errors.priority}</span>
+        )}
       </div>
     </div>
   );
@@ -704,3 +858,4 @@ function DetailRow({ label, value }) {
 }
 
 export default LoadManagement;
+            
