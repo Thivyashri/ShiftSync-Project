@@ -1,17 +1,20 @@
 import api from './api';
 
 // Get driver recommendations for a load
-export const getRecommendations = (loadId) => api.post('/assignment/recommend', { loadId });
+export const getRecommendations = (loadId) =>
+  api.post('/assignment/recommend', { loadId });
 
 // Manually assign a load to a driver
 export const assignLoad = (loadId, driverId, isOverride = false) =>
   api.post('/assignment/assign', { loadId, driverId, isOverride });
 
 // Auto-assign a load to the best driver
-export const autoAssign = (loadId) => api.post('/assignment/auto-assign', { loadId });
+export const autoAssign = (loadId) =>
+  api.post('/assignment/auto-assign', { loadId });
 
 // Auto-assign all pending loads
-export const autoAssignAll = () => api.post('/assignment/auto-assign-all');
+export const autoAssignAll = () =>
+  api.post('/assignment/auto-assign-all');
 
 // Get overload prediction for driver-load combination
 export const getOverloadPrediction = (driverId, loadId) =>
@@ -35,16 +38,16 @@ export const getAssignments = (filters = {}) => {
       const day = String(filters.date.getDate()).padStart(2, '0');
       filters.date = `${year}-${month}-${day}`;
     } else if (typeof filters.date === 'string') {
-      // If already a string, just ensure it's YYYY-MM-DD format
       filters.date = filters.date.split('T')[0];
     }
   }
-  
+
   return api.get('/assignment/list', { params: filters });
 };
 
 // Get assignment statistics
-export const getAssignmentStats = () => api.get('/assignment/stats');
+export const getAssignmentStats = () =>
+  api.get('/assignment/stats');
 
 // Update assignment status
 export const updateAssignmentStatus = (assignmentId, status) =>

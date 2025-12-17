@@ -36,7 +36,10 @@ namespace ShiftSync.Api.Controllers
                 q = q.Where(l => l.Region == region);
 
             if (!string.IsNullOrWhiteSpace(status))
-                q = q.Where(l => l.Status == status);
+            {
+                var st = status.Trim().ToUpper();
+                q = q.Where(l => (l.Status ?? "").ToUpper() == st);
+            }
 
             // Optional date filter (CreatedAt day range in UTC)
             if (date.HasValue)
@@ -72,8 +75,49 @@ namespace ShiftSync.Api.Controllers
         }
 
         // =========================================================
+        // ✅ PATCH: /api/loads/{id}/complete
+        // Driver clicks "Completed" → Status changes ASSIGNED → COMPLETED
+        // =========================================================
+        [HttpPatch("{id:int}/complete")]
+        public async Task<IActionResult> MarkCompleted(int id)
+        {
+            var load = await _db.Loads.FirstOrDefaultAsync(l => l.LoadId == id);
+            if (load == null)
+                return NotFound(new { message = "Load not found" });
+
+            var current = (load.Status ?? "").Trim().ToUpper();
+
+            // Allow only ASSIGNED -> COMPLETED (recommended)
+            if (current != "ASSIGNED")
+                return BadRequest(new { message = $"Cannot mark completed. Current status: {load.Status}" });
+
+            // ✅ 1) Update Loads table
+            load.Status = "COMPLETED";
+
+            // ✅ 2) Update ShiftAssignments table also (same LoadId)
+            var relatedAssignments = await _db.ShiftAssignments
+                .Where(a => a.LoadId == id)
+                .ToListAsync();
+
+            foreach (var a in relatedAssignments)
+            {
+                a.Status = "COMPLETED";
+            }
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Load marked as COMPLETED",
+                loadId = load.LoadId,
+                loadRef = load.LoadRef,
+                status = load.Status,
+                updatedAssignments = relatedAssignments.Count
+            });
+        }
+
+        // =========================================================
         // GET: /api/loads/stats?region=Tambaram&status=PENDING&date=2025-12-14
-        // ✅ Filter-aware stats (Option A)
         // =========================================================
         [HttpGet("stats")]
         public async Task<IActionResult> Stats(
@@ -82,7 +126,6 @@ namespace ShiftSync.Api.Controllers
             [FromQuery] DateOnly? date
         )
         {
-            // ✅ Debug: confirm what values API is receiving
             Console.WriteLine($"[LoadsController.Stats] region={region}, status={status}, date={date}");
 
             var q = _db.Loads.AsQueryable();
@@ -91,7 +134,10 @@ namespace ShiftSync.Api.Controllers
                 q = q.Where(l => l.Region == region);
 
             if (!string.IsNullOrWhiteSpace(status))
-                q = q.Where(l => l.Status == status);
+            {
+                var st = status.Trim().ToUpper();
+                q = q.Where(l => (l.Status ?? "").ToUpper() == st);
+            }
 
             if (date.HasValue)
             {
@@ -105,10 +151,10 @@ namespace ShiftSync.Api.Controllers
             }
 
             var total = await q.CountAsync();
-            var pending = await q.CountAsync(x => x.Status == "PENDING");
-            var assigned = await q.CountAsync(x => x.Status == "ASSIGNED");
-            var completed = await q.CountAsync(x => x.Status == "COMPLETED");
-            var highPending = await q.CountAsync(x => x.Status == "PENDING" && x.Priority == "HIGH");
+            var pending = await q.CountAsync(x => (x.Status ?? "") == "PENDING");
+            var assigned = await q.CountAsync(x => (x.Status ?? "") == "ASSIGNED");
+            var completed = await q.CountAsync(x => (x.Status ?? "") == "COMPLETED");
+            var highPending = await q.CountAsync(x => (x.Status ?? "") == "PENDING" && (x.Priority ?? "") == "HIGH");
 
             return Ok(new LoadStatsDto
             {
@@ -164,7 +210,7 @@ namespace ShiftSync.Api.Controllers
             var load = await _db.Loads.FirstOrDefaultAsync(x => x.LoadId == id);
             if (load == null) return NotFound("Load not found");
 
-            if (load.Status != "PENDING")
+            if ((load.Status ?? "") != "PENDING")
                 return BadRequest("Only PENDING loads can be edited.");
 
             if (string.IsNullOrWhiteSpace(dto.Region))
@@ -173,7 +219,6 @@ namespace ShiftSync.Api.Controllers
             if (dto.Stops <= 0) return BadRequest("Stops must be > 0");
             if (dto.EstimatedDistance <= 0) return BadRequest("EstimatedDistance must be > 0");
 
-            // Auto-calc hours if missing/0 (Chennai avg speed 20 km/h)
             var hours = dto.EstimatedHours;
             if (hours <= 0)
                 hours = Math.Round(dto.EstimatedDistance / 20m, 1);
@@ -199,7 +244,7 @@ namespace ShiftSync.Api.Controllers
             var load = await _db.Loads.FirstOrDefaultAsync(x => x.LoadId == id);
             if (load == null) return NotFound("Load not found");
 
-            if (load.Status != "PENDING")
+            if ((load.Status ?? "") != "PENDING")
                 return BadRequest("Only PENDING loads can be deleted.");
 
             _db.Loads.Remove(load);
