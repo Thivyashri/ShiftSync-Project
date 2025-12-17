@@ -141,67 +141,75 @@ namespace ShiftSync.Api.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
+        
+/// <summary>
+/// Get all assignments with optional filters.
+/// </summary>
+[HttpGet("list")]
+public async Task<IActionResult> GetAssignments(
+    [FromQuery] string? date,  // Changed to string to avoid DateTime parsing issues
+    [FromQuery] string? status,
+    [FromQuery] int? driverId)
+{
+    try
+    {
+        var query = _context.ShiftAssignments
+            .Include(s => s.Driver)
+            .Include(s => s.Load)
+            .AsQueryable();
 
-        /// <summary>
-        /// Get all assignments with optional filters.
-        /// </summary>
-        [HttpGet("list")]
-        public async Task<IActionResult> GetAssignments(
-            [FromQuery] DateTime? date,
-            [FromQuery] string? status,
-            [FromQuery] int? driverId)
+        // Apply non-date filters first
+        if (!string.IsNullOrEmpty(status))
+            query = query.Where(s => s.Status == status.ToUpper());
+
+        if (driverId.HasValue)
+            query = query.Where(s => s.DriverId == driverId.Value);
+
+        // Get all assignments (or filtered by status/driver)
+        // Order by Load Reference (ascending)
+        var allAssignments = await query
+            .OrderBy(s => s.LoadRef)
+            .Select(s => new
+            {
+                s.AssignmentId,
+                s.DriverId,
+                DriverName = s.Driver != null ? s.Driver.Name : "Unknown",
+                DriverRegion = s.Driver != null ? s.Driver.Region : "",
+                s.LoadId,
+                s.LoadRef,
+                LoadRegion = s.Load != null ? s.Load.Region : "",
+                LoadStops = s.Load != null ? s.Load.Stops : 0,
+                LoadPriority = s.Load != null ? s.Load.Priority : "",
+                s.AssignedDate,
+                s.Status,
+                s.SuitabilityScore,
+                s.OverloadScore,
+                s.IsOverride,
+                s.CreatedAt
+            })
+            .ToListAsync();
+
+        // Filter by date in memory (after fetching from database)
+        if (!string.IsNullOrEmpty(date))
         {
-            try
+            if (DateTime.TryParse(date, out var targetDate))
             {
-                var query = _context.ShiftAssignments
-                    .Include(s => s.Driver)
-                    .Include(s => s.Load)
-                    .AsQueryable();
-
-                if (date.HasValue)
-                {
-                    // Use UTC date range to avoid PostgreSQL timestamp issues
-                    var dateStart = DateTime.SpecifyKind(date.Value.Date, DateTimeKind.Utc);
-                    var dateEnd = dateStart.AddDays(1);
-                    query = query.Where(s => s.AssignedDate >= dateStart && s.AssignedDate < dateEnd);
-                }
-
-                if (!string.IsNullOrEmpty(status))
-                    query = query.Where(s => s.Status == status.ToUpper());
-
-                if (driverId.HasValue)
-                    query = query.Where(s => s.DriverId == driverId.Value);
-
-                var assignments = await query
-                    .OrderByDescending(s => s.CreatedAt)
-                    .Select(s => new
-                    {
-                        s.AssignmentId,
-                        s.DriverId,
-                        DriverName = s.Driver != null ? s.Driver.Name : "Unknown",
-                        DriverRegion = s.Driver != null ? s.Driver.Region : "",
-                        s.LoadId,
-                        s.LoadRef,
-                        LoadRegion = s.Load != null ? s.Load.Region : "",
-                        LoadStops = s.Load != null ? s.Load.Stops : 0,
-                        LoadPriority = s.Load != null ? s.Load.Priority : "",
-                        s.AssignedDate,
-                        s.Status,
-                        s.SuitabilityScore,
-                        s.OverloadScore,
-                        s.IsOverride,
-                        s.CreatedAt
-                    })
-                    .ToListAsync();
-
-                return Ok(assignments);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { error = ex.Message });
+                // Compare only the date part (year, month, day)
+                allAssignments = allAssignments
+                    .Where(s => s.AssignedDate.Year == targetDate.Year &&
+                               s.AssignedDate.Month == targetDate.Month &&
+                               s.AssignedDate.Day == targetDate.Day)
+                    .ToList();
             }
         }
 
+        return Ok(allAssignments);
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { error = ex.Message, details = ex.ToString() });
+    }
+}
         /// <summary>
         /// Get assignment statistics for dashboard.
         /// </summary>

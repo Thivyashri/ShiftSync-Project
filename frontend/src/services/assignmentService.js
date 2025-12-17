@@ -26,8 +26,22 @@ export const checkEligibility = (driverId, loadId) =>
   api.get(`/assignment/eligibility/${driverId}/${loadId}`);
 
 // Get all assignments with optional filters
-export const getAssignments = (filters = {}) =>
-  api.get('/assignment/list', { params: filters });
+export const getAssignments = (filters = {}) => {
+  // Ensure date is in YYYY-MM-DD string format
+  if (filters.date) {
+    if (filters.date instanceof Date) {
+      const year = filters.date.getFullYear();
+      const month = String(filters.date.getMonth() + 1).padStart(2, '0');
+      const day = String(filters.date.getDate()).padStart(2, '0');
+      filters.date = `${year}-${month}-${day}`;
+    } else if (typeof filters.date === 'string') {
+      // If already a string, just ensure it's YYYY-MM-DD format
+      filters.date = filters.date.split('T')[0];
+    }
+  }
+  
+  return api.get('/assignment/list', { params: filters });
+};
 
 // Get assignment statistics
 export const getAssignmentStats = () => api.get('/assignment/stats');

@@ -50,7 +50,7 @@ namespace ShiftSync.Api.Controllers
                 q = q.Where(l => l.CreatedAt >= startUtc && l.CreatedAt < endUtc);
             }
 
-            var data = await q.OrderByDescending(l => l.CreatedAt)
+            var data = await q.OrderBy(l => l.CreatedAt)
                 .Select(l => new LoadResponseDto
                 {
                     LoadId = l.LoadId,
