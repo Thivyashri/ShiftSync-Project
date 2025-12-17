@@ -14,27 +14,41 @@ export default function Signin() {
   // Validation errors
   const [validationErrors, setValidationErrors] = useState({
     username: "",
-    password: ""
+    password: "",
   });
 
+  const isEmail = (value) => {
+    const v = value.trim();
+    return v.includes("@") && v.includes(".com");
+  };
+
   // Validation functions
-  const validateUsername = (value) => {
+  const validateUsername = (value, currentRole) => {
     if (!value || value.trim() === "") {
-      return "Username/phone/email is required";
+      return currentRole === "ADMIN"
+        ? "Username or email is required"
+        : "Phone or email is required";
     }
 
-    // Check if it looks like an email
-    const hasAtSymbol = value.includes("@");
-    
-    if (hasAtSymbol) {
-      // Email validation: must contain @ and .com
-      if (!value.includes(".com")) {
-        return "Email must contain @ and .com";
+    const trimmed = value.trim();
+
+    if (currentRole === "DRIVER") {
+      // DRIVER: must be 10‑digit phone OR email with @ and .com
+      if (isEmail(trimmed)) {
+        return "";
       }
-    } else {
-      // Phone number validation: must be exactly 10 digits
-      if (!/^\d{10}$/.test(value.trim())) {
-        return "Phone must be exactly 10 digits";
+      if (/^\d{10}$/.test(trimmed)) {
+        return "";
+      }
+      return "For driver login, enter 10 digit phone number or a valid email (@ and .com)";
+    }
+
+    // ADMIN:
+    // Any non‑empty username is allowed.
+    // But if it looks like email, enforce email rule.
+    if (trimmed.includes("@") || trimmed.includes(".com")) {
+      if (!isEmail(trimmed)) {
+        return "Email must contain @ and .com";
       }
     }
 
@@ -51,38 +65,37 @@ export default function Signin() {
   const handleUsernameChange = (e) => {
     const value = e.target.value;
     setUsername(value);
-    setValidationErrors(prev => ({ ...prev, username: "" }));
+    setValidationErrors((prev) => ({ ...prev, username: "" }));
   };
 
   const handleUsernameBlur = () => {
-    setValidationErrors(prev => ({ 
-      ...prev, 
-      username: validateUsername(username) 
+    setValidationErrors((prev) => ({
+      ...prev,
+      username: validateUsername(username, role),
     }));
   };
 
   const handlePasswordChange = (e) => {
     const value = e.target.value;
     setPassword(value);
-    setValidationErrors(prev => ({ ...prev, password: "" }));
+    setValidationErrors((prev) => ({ ...prev, password: "" }));
   };
 
   const handlePasswordBlur = () => {
-    setValidationErrors(prev => ({ 
-      ...prev, 
-      password: validatePassword(password) 
+    setValidationErrors((prev) => ({
+      ...prev,
+      password: validatePassword(password),
     }));
   };
 
   const validateForm = () => {
     const errors = {
-      username: validateUsername(username),
-      password: validatePassword(password)
+      username: validateUsername(username, role),
+      password: validatePassword(password),
     };
 
     setValidationErrors(errors);
-
-    return !Object.values(errors).some(error => error !== "");
+    return !Object.values(errors).some((error) => error !== "");
   };
 
   async function handleLogin(e) {
@@ -95,10 +108,13 @@ export default function Signin() {
     }
 
     try {
-      const response = await axios.post("http://localhost:5028/api/auth/login", {
-        username,
-        password
-      });
+      const response = await axios.post(
+        "http://localhost:5028/api/auth/login",
+        {
+          username,
+          password,
+        }
+      );
 
       const { token, user } = response.data;
 
@@ -113,11 +129,14 @@ export default function Signin() {
       localStorage.setItem("userRole", user.role);
       localStorage.setItem("userId", user.id);
       localStorage.setItem("driverId", user.id);
-      localStorage.setItem("driverData", JSON.stringify({
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }));
+      localStorage.setItem(
+        "driverData",
+        JSON.stringify({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        })
+      );
 
       // Attach token to axios globally
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
@@ -130,16 +149,20 @@ export default function Signin() {
       } else {
         setError("Unknown role returned by server.");
       }
-
     } catch (err) {
       setError("Invalid username or password");
     }
   }
 
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    // Clear username validation when switching role
+    setValidationErrors((prev) => ({ ...prev, username: "" }));
+  };
+
   return (
     <div className="ss-page-root">
       <div className="ss-center-wrap">
-
         <header className="ss-header">
           <img
             src="src/assets/truck.png"
@@ -153,14 +176,14 @@ export default function Signin() {
           <div className="ss-tabs" role="tablist">
             <button
               className={`ss-tab ${role === "DRIVER" ? "ss-tab-active" : ""}`}
-              onClick={() => setRole("DRIVER")}
+              onClick={() => handleRoleChange("DRIVER")}
             >
               DRIVER
             </button>
 
             <button
               className={`ss-tab ${role === "ADMIN" ? "ss-tab-active" : ""}`}
-              onClick={() => setRole("ADMIN")}
+              onClick={() => handleRoleChange("ADMIN")}
             >
               ADMIN
             </button>
@@ -168,7 +191,9 @@ export default function Signin() {
         </div>
 
         <form className="ss-form" onSubmit={handleLogin}>
-          {error && <p style={{ color: "red", marginBottom: "16px" }}>{error}</p>}
+          {error && (
+            <p style={{ color: "red", marginBottom: "16px" }}>{error}</p>
+          )}
 
           <div className="ss-field">
             <input
@@ -181,16 +206,18 @@ export default function Signin() {
                 role === "ADMIN" ? "Username or Email" : "Phone or Email"
               }
               style={{
-                borderColor: validationErrors.username ? "#dc2626" : undefined
+                borderColor: validationErrors.username ? "#dc2626" : undefined,
               }}
             />
             {validationErrors.username && (
-              <span style={{ 
-                color: '#dc2626', 
-                fontSize: '12px', 
-                marginTop: '4px', 
-                display: 'block' 
-              }}>
+              <span
+                style={{
+                  color: "#dc2626",
+                  fontSize: "12px",
+                  marginTop: "4px",
+                  display: "block",
+                }}
+              >
                 {validationErrors.username}
               </span>
             )}
@@ -205,7 +232,7 @@ export default function Signin() {
               onBlur={handlePasswordBlur}
               placeholder="Enter your password"
               style={{
-                borderColor: validationErrors.password ? "#dc2626" : undefined
+                borderColor: validationErrors.password ? "#dc2626" : undefined,
               }}
             />
 
@@ -216,17 +243,19 @@ export default function Signin() {
             >
               {showPassword ? "🙈" : "👁️"}
             </button>
-            
+
             {validationErrors.password && (
-              <span style={{ 
-                color: '#dc2626', 
-                fontSize: '12px', 
-                marginTop: '4px', 
-                display: 'block',
-                position: 'absolute',
-                bottom: '-20px',
-                left: 0
-              }}>
+              <span
+                style={{
+                  color: "#dc2626",
+                  fontSize: "12px",
+                  marginTop: "4px",
+                  display: "block",
+                  position: "absolute",
+                  bottom: "-20px",
+                  left: 0,
+                }}
+              >
                 {validationErrors.password}
               </span>
             )}
@@ -247,7 +276,6 @@ export default function Signin() {
             </button>
           </div>
         </form>
-
       </div>
     </div>
   );
