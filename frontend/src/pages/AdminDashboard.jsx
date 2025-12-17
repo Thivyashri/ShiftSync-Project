@@ -25,12 +25,33 @@ function AdminDashboard() {
       setLoading(true);
       setError(null);
 
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      
+      console.log('=== DASHBOARD DEBUG ===');
+      console.log('Current Date/Time:', today);
+      console.log('Sending date to API:', todayString);
+
       const [driverStatsRes, loadStatsRes, assignmentsRes, alertsRes] = await Promise.all([
         getDriverStats(),
         getLoadStats(),
-        assignmentService.getAssignments({ date: new Date().toISOString().split('T')[0] }),
+        assignmentService.getAssignments({ date: todayString }),
         fatigueService.getFatigueAlerts(),
       ]);
+
+      console.log('Assignments API Response:', assignmentsRes);
+      console.log('Number of assignments returned:', assignmentsRes.data?.length || 0);
+      
+      if (assignmentsRes.data && assignmentsRes.data.length > 0) {
+        console.log('First assignment date:', assignmentsRes.data[0].assignedDate);
+        console.log('Sample assignment:', assignmentsRes.data[0]);
+      }
+
+      // Sort assignments by load reference (ascending order)
+      const sortedAssignments = (assignmentsRes.data || []).sort((a, b) => 
+        (a.loadRef || '').localeCompare(b.loadRef || '')
+      );
 
       setStats({
         activeDrivers: driverStatsRes.data.activeDrivers || 0,
@@ -39,10 +60,13 @@ function AdminDashboard() {
         highFatigueDrivers: driverStatsRes.data.highFatigueDrivers || 0,
       });
 
-      setAssignments(assignmentsRes.data || []);
+      setAssignments(sortedAssignments);
       setAlerts(alertsRes.data.alerts || []);
+      
+      console.log('=== END DEBUG ===');
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
+      console.error("Error details:", err.response?.data);
       setError("Failed to load dashboard data. Please try again.");
     } finally {
       setLoading(false);
@@ -129,6 +153,9 @@ function AdminDashboard() {
         <div className="card panel">
           <div className="panel-header">
             <h2 className="section-title">Today's Assignments</h2>
+            <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>
+              ({assignments.length} assignments)
+            </span>
           </div>
 
           <div className="table-wrapper">
@@ -151,7 +178,7 @@ function AdminDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  assignments.slice(0, 6).map((item) => (
+                  assignments.map((item) => (
                     <tr key={item.assignmentId}>
                       <td style={{ fontWeight: 500 }}>{item.loadRef}</td>
                       <td>{item.driverName}</td>
