@@ -18,6 +18,12 @@ export const checkOutDriver = async () => {
   return response.data;
 };
 
+// ✅ Mark a load as COMPLETED (driver action)
+export const completeLoad = async (loadId) => {
+  const response = await api.patch(`/loads/${loadId}/complete`);
+  return response.data;
+};
+
 // Get today's attendance
 export const getTodayAttendance = async () => {
   const response = await api.get("/driver/attendance/today");

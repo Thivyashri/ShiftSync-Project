@@ -27,6 +27,10 @@ namespace ShiftSync.Api.DTOs
     public class AssignmentDto
     {
         public int AssignmentId { get; set; }
+
+        // ✅ Added: needed to call /api/loads/{loadId}/complete from frontend
+        public int LoadId { get; set; }
+
         public string LoadRef { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
     }

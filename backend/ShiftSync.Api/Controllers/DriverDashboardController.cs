@@ -83,8 +83,9 @@ namespace ShiftSync.Api.Controllers
                 var today = DateTime.UtcNow.Date;
                 var attendance = allAttendance.FirstOrDefault(a => a.Date.Date == today);
 
-                // Get all assignments for this driver and filter in memory
+                // ✅ IMPORTANT: Include Load so we can send LoadId to frontend
                 var allAssignments = await _context.ShiftAssignments
+                    .Include(s => s.Load)
                     .Where(s => s.DriverId == driverId)
                     .ToListAsync();
 
@@ -93,6 +94,10 @@ namespace ShiftSync.Api.Controllers
                     .Select(s => new AssignmentDto
                     {
                         AssignmentId = s.AssignmentId,
+
+                        // ✅ THIS IS THE KEY LINE
+                        LoadId = s.LoadId ?? 0,
+
                         LoadRef = s.LoadRef,
                         Status = s.Status
                     }).ToList();
@@ -170,10 +175,8 @@ namespace ShiftSync.Api.Controllers
             {
                 int driverId = GetDriverIdFromToken();
                 var now = DateTime.UtcNow;
-                // Use UTC date for PostgreSQL compatibility
                 var today = DateTime.SpecifyKind(now.Date, DateTimeKind.Utc);
 
-                // Get all attendance and filter in memory
                 var allAttendance = await _context.Attendances
                     .Where(a => a.DriverId == driverId)
                     .ToListAsync();
@@ -203,7 +206,6 @@ namespace ShiftSync.Api.Controllers
 
                 await _context.SaveChangesAsync();
 
-                // Update consecutive days after check-in
                 await _fatigueService.UpdateConsecutiveDays(driverId);
 
                 return Ok(new { message = "Checked in successfully", checkInTime = existing.CheckInTime });
@@ -226,7 +228,6 @@ namespace ShiftSync.Api.Controllers
             {
                 int driverId = GetDriverIdFromToken();
                 var now = DateTime.UtcNow;
-                // Use UTC date for PostgreSQL compatibility
                 var today = DateTime.SpecifyKind(now.Date, DateTimeKind.Utc);
 
                 var allAttendance = await _context.Attendances
@@ -245,12 +246,10 @@ namespace ShiftSync.Api.Controllers
                 var totalHours = (attendance.CheckOutTime.Value - attendance.CheckInTime.Value).TotalHours;
                 attendance.TotalHours = Math.Round((decimal)totalHours, 2);
 
-                // Set overtime flag if worked more than 8 hours
                 attendance.IsOvertime = attendance.TotalHours > 8;
 
                 await _context.SaveChangesAsync();
 
-                // Update fatigue score after checkout
                 var newFatigueScore = await _fatigueService.UpdateDriverFatigueScore(driverId);
 
                 return Ok(new
@@ -290,7 +289,6 @@ namespace ShiftSync.Api.Controllers
             try
             {
                 int driverId = GetDriverIdFromToken();
-                // Use UTC date range for PostgreSQL compatibility
                 var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
                 var todayEnd = todayStart.AddDays(1);
 
@@ -305,7 +303,6 @@ namespace ShiftSync.Api.Controllers
                 var totalHours = assignments.Sum(a => a.Load?.EstimatedHours ?? 0);
                 var totalDistance = assignments.Sum(a => a.Load?.EstimatedDistance ?? 0);
 
-                // Calculate overload indicator
                 decimal stopsNorm = Math.Min(1m, totalStops / 60m);
                 decimal hoursNorm = Math.Min(1m, totalHours / 10m);
                 decimal distanceNorm = Math.Min(1m, totalDistance / 200m);
