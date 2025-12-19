@@ -56,7 +56,6 @@ namespace ShiftSync.Api.Controllers
                     request.DriverId,
                     request.IsOverride);
 
-                // Update fatigue score after assignment
                 await _fatigueService.UpdateDriverFatigueScore(request.DriverId);
 
                 return Ok(result);
@@ -79,7 +78,6 @@ namespace ShiftSync.Api.Controllers
 
                 if (result.Success)
                 {
-                    // Update fatigue score after assignment
                     await _fatigueService.UpdateDriverFatigueScore(result.DriverId);
                 }
 
@@ -141,75 +139,71 @@ namespace ShiftSync.Api.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
-        
-/// <summary>
-/// Get all assignments with optional filters.
-/// </summary>
-[HttpGet("list")]
-public async Task<IActionResult> GetAssignments(
-    [FromQuery] string? date,  // Changed to string to avoid DateTime parsing issues
-    [FromQuery] string? status,
-    [FromQuery] int? driverId)
-{
-    try
-    {
-        var query = _context.ShiftAssignments
-            .Include(s => s.Driver)
-            .Include(s => s.Load)
-            .AsQueryable();
 
-        // Apply non-date filters first
-        if (!string.IsNullOrEmpty(status))
-            query = query.Where(s => s.Status == status.ToUpper());
-
-        if (driverId.HasValue)
-            query = query.Where(s => s.DriverId == driverId.Value);
-
-        // Get all assignments (or filtered by status/driver)
-        // Order by Load Reference (ascending)
-        var allAssignments = await query
-            .OrderBy(s => s.LoadRef)
-            .Select(s => new
-            {
-                s.AssignmentId,
-                s.DriverId,
-                DriverName = s.Driver != null ? s.Driver.Name : "Unknown",
-                DriverRegion = s.Driver != null ? s.Driver.Region : "",
-                s.LoadId,
-                s.LoadRef,
-                LoadRegion = s.Load != null ? s.Load.Region : "",
-                LoadStops = s.Load != null ? s.Load.Stops : 0,
-                LoadPriority = s.Load != null ? s.Load.Priority : "",
-                s.AssignedDate,
-                s.Status,
-                s.SuitabilityScore,
-                s.OverloadScore,
-                s.IsOverride,
-                s.CreatedAt
-            })
-            .ToListAsync();
-
-        // Filter by date in memory (after fetching from database)
-        if (!string.IsNullOrEmpty(date))
+        /// <summary>
+        /// Get all assignments with optional filters.
+        /// </summary>
+        [HttpGet("list")]
+        public async Task<IActionResult> GetAssignments(
+            [FromQuery] string? date,
+            [FromQuery] string? status,
+            [FromQuery] int? driverId)
         {
-            if (DateTime.TryParse(date, out var targetDate))
+            try
             {
-                // Compare only the date part (year, month, day)
-                allAssignments = allAssignments
-                    .Where(s => s.AssignedDate.Year == targetDate.Year &&
-                               s.AssignedDate.Month == targetDate.Month &&
-                               s.AssignedDate.Day == targetDate.Day)
-                    .ToList();
+                var query = _context.ShiftAssignments
+                    .Include(s => s.Driver)
+                    .Include(s => s.Load)
+                    .AsQueryable();
+
+                if (!string.IsNullOrEmpty(status))
+                    query = query.Where(s => s.Status == status.ToUpper());
+
+                if (driverId.HasValue)
+                    query = query.Where(s => s.DriverId == driverId.Value);
+
+                var allAssignments = await query
+                    .OrderBy(s => s.LoadRef)
+                    .Select(s => new
+                    {
+                        s.AssignmentId,
+                        s.DriverId,
+                        DriverName = s.Driver != null ? s.Driver.Name : "Unknown",
+                        DriverRegion = s.Driver != null ? s.Driver.Region : "",
+                        s.LoadId,
+                        s.LoadRef,
+                        LoadRegion = s.Load != null ? s.Load.Region : "",
+                        LoadStops = s.Load != null ? s.Load.Stops : 0,
+                        LoadPriority = s.Load != null ? s.Load.Priority : "",
+                        s.AssignedDate,
+                        s.Status,
+                        s.SuitabilityScore,
+                        s.OverloadScore,
+                        s.IsOverride,
+                        s.CreatedAt
+                    })
+                    .ToListAsync();
+
+                if (!string.IsNullOrEmpty(date))
+                {
+                    if (DateTime.TryParse(date, out var targetDate))
+                    {
+                        allAssignments = allAssignments
+                            .Where(s => s.AssignedDate.Year == targetDate.Year &&
+                                        s.AssignedDate.Month == targetDate.Month &&
+                                        s.AssignedDate.Day == targetDate.Day)
+                            .ToList();
+                    }
+                }
+
+                return Ok(allAssignments);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message, details = ex.ToString() });
             }
         }
 
-        return Ok(allAssignments);
-    }
-    catch (Exception ex)
-    {
-        return BadRequest(new { error = ex.Message, details = ex.ToString() });
-    }
-}
         /// <summary>
         /// Get assignment statistics for dashboard.
         /// </summary>
@@ -218,7 +212,6 @@ public async Task<IActionResult> GetAssignments(
         {
             try
             {
-                // Use UTC date range to avoid PostgreSQL timestamp issues
                 var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
                 var todayEnd = todayStart.AddDays(1);
 
@@ -276,7 +269,6 @@ public async Task<IActionResult> GetAssignments(
 
                 assignment.Status = request.Status.ToUpper();
 
-                // Also update load status if exists
                 if (assignment.Load != null)
                 {
                     assignment.Load.Status = request.Status.ToUpper();
@@ -298,49 +290,23 @@ public async Task<IActionResult> GetAssignments(
         }
 
         /// <summary>
-        /// Bulk auto-assign all pending loads.
+        /// Bulk auto-assign all pending loads with fair distribution.
         /// </summary>
         [HttpPost("auto-assign-all")]
         public async Task<IActionResult> AutoAssignAll()
         {
             try
             {
-                var pendingLoads = await _context.Loads
+                var pendingLoadIds = await _context.Loads
                     .Where(l => l.Status == "PENDING")
-                    .OrderByDescending(l => l.Priority == "HIGH")
-                    .ThenByDescending(l => l.Priority == "MEDIUM")
-                    .ThenBy(l => l.CreatedAt)
+                    .Select(l => l.LoadId)
                     .ToListAsync();
 
-                var results = new List<AssignmentResult>();
-
-                foreach (var load in pendingLoads)
-                {
-                    try
-                    {
-                        var result = await _assignmentService.AutoAssign(load.LoadId);
-                        results.Add(result);
-
-                        if (result.Success)
-                        {
-                            await _fatigueService.UpdateDriverFatigueScore(result.DriverId);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        results.Add(new AssignmentResult
-                        {
-                            Success = false,
-                            LoadId = load.LoadId,
-                            LoadRef = load.LoadRef,
-                            Message = ex.Message
-                        });
-                    }
-                }
+                var results = await _assignmentService.AutoAssignBatch(pendingLoadIds);
 
                 return Ok(new
                 {
-                    message = "Bulk auto-assignment completed",
+                    message = "Bulk auto-assignment completed (fair distribution, max 3 loads per driver)",
                     totalProcessed = results.Count,
                     successCount = results.Count(r => r.Success),
                     failedCount = results.Count(r => !r.Success),
@@ -361,11 +327,9 @@ public async Task<IActionResult> GetAssignments(
         {
             try
             {
-                // 1. Delete all shift assignments
                 var assignments = await _context.ShiftAssignments.ToListAsync();
                 _context.ShiftAssignments.RemoveRange(assignments);
 
-                // 2. Reset all loads to PENDING status
                 var loads = await _context.Loads.ToListAsync();
                 foreach (var load in loads)
                 {
@@ -374,11 +338,9 @@ public async Task<IActionResult> GetAssignments(
                     load.AssignedAt = null;
                 }
 
-                // 3. Delete all attendance records
                 var attendances = await _context.Attendances.ToListAsync();
                 _context.Attendances.RemoveRange(attendances);
 
-                // 4. Reset all driver fatigue scores and consecutive days
                 var drivers = await _context.Drivers.ToListAsync();
                 foreach (var driver in drivers)
                 {
@@ -423,7 +385,6 @@ public async Task<IActionResult> GetAssignments(
                     .Where(d => d.Status == "ACTIVE")
                     .ToListAsync();
 
-                // Get all attendances for today (in-memory filter)
                 var allAttendances = await _context.Attendances.ToListAsync();
                 var todayAttendances = allAttendances
                     .Where(a => a.Date.Date == todayStart.Date)

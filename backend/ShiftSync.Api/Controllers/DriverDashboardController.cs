@@ -30,7 +30,7 @@ namespace ShiftSync.Api.Controllers
             return int.Parse(idClaim.Value);
         }
 
-        // GET /api/driver/me - Get driver profile
+        // GET /api/driver/me
         [HttpGet("me")]
         public async Task<IActionResult> GetMe()
         {
@@ -61,7 +61,7 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // GET /api/driver/dashboard - Get full dashboard data
+        // GET /api/driver/dashboard
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
@@ -75,7 +75,6 @@ namespace ShiftSync.Api.Controllers
 
                 if (driver == null) return NotFound(new { message = "Driver not found" });
 
-                // Get all attendance records for this driver and filter in memory
                 var allAttendance = await _context.Attendances
                     .Where(a => a.DriverId == driverId)
                     .ToListAsync();
@@ -83,7 +82,6 @@ namespace ShiftSync.Api.Controllers
                 var today = DateTime.UtcNow.Date;
                 var attendance = allAttendance.FirstOrDefault(a => a.Date.Date == today);
 
-                // ✅ IMPORTANT: Include Load so we can send LoadId to frontend
                 var allAssignments = await _context.ShiftAssignments
                     .Include(s => s.Load)
                     .Where(s => s.DriverId == driverId)
@@ -94,10 +92,7 @@ namespace ShiftSync.Api.Controllers
                     .Select(s => new AssignmentDto
                     {
                         AssignmentId = s.AssignmentId,
-
-                        // ✅ THIS IS THE KEY LINE
                         LoadId = s.LoadId ?? 0,
-
                         LoadRef = s.LoadRef,
                         Status = s.Status
                     }).ToList();
@@ -132,7 +127,7 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // GET /api/driver/attendance/today - Get today's attendance
+        // GET /api/driver/attendance/today
         [HttpGet("attendance/today")]
         public async Task<IActionResult> GetTodayAttendance()
         {
@@ -167,15 +162,15 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // POST /api/driver/checkin - Check in
+        // POST /api/driver/checkin
         [HttpPost("checkin")]
         public async Task<IActionResult> CheckIn()
         {
             try
             {
                 int driverId = GetDriverIdFromToken();
-                var now = DateTime.UtcNow;
-                var today = DateTime.SpecifyKind(now.Date, DateTimeKind.Utc);
+                var nowUtc = DateTime.UtcNow;
+                var today = DateTime.SpecifyKind(nowUtc.Date, DateTimeKind.Utc);
 
                 var allAttendance = await _context.Attendances
                     .Where(a => a.DriverId == driverId)
@@ -192,20 +187,23 @@ namespace ShiftSync.Api.Controllers
                     {
                         DriverId = driverId,
                         Date = today,
-                        CheckInTime = now,
+                        CheckInTime = nowUtc,
                         IsAbsent = false,
-                        CreatedAt = now
+                        TotalHours = 0m,
+                        IsOvertime = false,
+                        CreatedAt = nowUtc
                     };
                     _context.Attendances.Add(existing);
                 }
                 else
                 {
-                    existing.CheckInTime = now;
+                    existing.CheckInTime = nowUtc;
                     existing.IsAbsent = false;
+                    existing.TotalHours = 0m;
+                    existing.IsOvertime = false;
                 }
 
                 await _context.SaveChangesAsync();
-
                 await _fatigueService.UpdateConsecutiveDays(driverId);
 
                 return Ok(new { message = "Checked in successfully", checkInTime = existing.CheckInTime });
@@ -220,15 +218,15 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // POST /api/driver/checkout - Check out
+        // POST /api/driver/checkout
         [HttpPost("checkout")]
         public async Task<IActionResult> CheckOut()
         {
             try
             {
                 int driverId = GetDriverIdFromToken();
-                var now = DateTime.UtcNow;
-                var today = DateTime.SpecifyKind(now.Date, DateTimeKind.Utc);
+                var nowUtc = DateTime.UtcNow;
+                var today = DateTime.SpecifyKind(nowUtc.Date, DateTimeKind.Utc);
 
                 var allAttendance = await _context.Attendances
                     .Where(a => a.DriverId == driverId)
@@ -242,11 +240,21 @@ namespace ShiftSync.Api.Controllers
                 if (attendance.CheckOutTime != null)
                     return BadRequest(new { message = "Already checked out today" });
 
-                attendance.CheckOutTime = now;
-                var totalHours = (attendance.CheckOutTime.Value - attendance.CheckInTime.Value).TotalHours;
-                attendance.TotalHours = Math.Round((decimal)totalHours, 2);
+                // Always overwrite checkout and recalculate hours
+                attendance.CheckOutTime = nowUtc;
 
-                attendance.IsOvertime = attendance.TotalHours > 8;
+                // Normalize both as UTC before subtracting to avoid negative/offset issues
+                var checkInUtc = DateTime.SpecifyKind(attendance.CheckInTime.Value, DateTimeKind.Utc);
+                var checkOutUtc = DateTime.SpecifyKind(attendance.CheckOutTime.Value, DateTimeKind.Utc);
+
+                var totalHoursDouble = (checkOutUtc - checkInUtc).TotalHours;
+                if (totalHoursDouble < 0)
+                {
+                    totalHoursDouble = 0;
+                }
+
+                attendance.TotalHours = Math.Round((decimal)totalHoursDouble, 2);
+                attendance.IsOvertime = attendance.TotalHours > 8m;
 
                 await _context.SaveChangesAsync();
 
@@ -266,7 +274,7 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // GET /api/driver/fatigue - Get driver's fatigue breakdown
+        // GET /api/driver/fatigue
         [HttpGet("fatigue")]
         public async Task<IActionResult> GetFatigueBreakdown()
         {
@@ -282,7 +290,7 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // GET /api/driver/workload - Get driver's current workload for today
+        // GET /api/driver/workload
         [HttpGet("workload")]
         public async Task<IActionResult> GetTodayWorkload()
         {
@@ -295,8 +303,8 @@ namespace ShiftSync.Api.Controllers
                 var assignments = await _context.ShiftAssignments
                     .Include(s => s.Load)
                     .Where(s => s.DriverId == driverId &&
-                               s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
-                               s.Status != "COMPLETED")
+                                s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
+                                s.Status != "COMPLETED")
                     .ToListAsync();
 
                 var totalStops = assignments.Sum(a => a.Load?.Stops ?? 0);
@@ -309,7 +317,7 @@ namespace ShiftSync.Api.Controllers
                 decimal overloadScore = 0.50m * stopsNorm + 0.30m * hoursNorm + 0.20m * distanceNorm;
 
                 string overloadStatus = overloadScore < 0.75m ? "SAFE" :
-                                       overloadScore < 0.90m ? "WARNING" : "UNSAFE";
+                                        overloadScore < 0.90m ? "WARNING" : "UNSAFE";
 
                 return Ok(new
                 {

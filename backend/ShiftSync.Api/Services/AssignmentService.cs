@@ -29,41 +29,34 @@ namespace ShiftSync.Api.Services
             if (driver == null) throw new Exception("Driver not found");
             if (load == null) throw new Exception("Load not found");
 
-            // Use UTC date range for PostgreSQL compatibility
             var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
             var todayEnd = todayStart.AddDays(1);
 
-            // Get driver's current assignments for today
             var todayAssignments = await _context.ShiftAssignments
                 .Include(s => s.Load)
                 .Where(s => s.DriverId == driverId &&
-                           s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
-                           s.Status != "COMPLETED")
+                            s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
+                            s.Status != "COMPLETED")
                 .ToListAsync();
 
-            // Current workload
             int currentStops = todayAssignments.Sum(a => a.Load?.Stops ?? 0);
             decimal currentHours = todayAssignments.Sum(a => a.Load?.EstimatedHours ?? 0);
             decimal currentDistance = todayAssignments.Sum(a => a.Load?.EstimatedDistance ?? 0);
 
-            // Projected workload (current + new load)
             int projectedStops = currentStops + load.Stops;
             decimal projectedHours = currentHours + load.EstimatedHours;
             decimal projectedDistance = currentDistance + load.EstimatedDistance;
 
-            // Normalize (60 stops, 10 hours, 200km = max)
             decimal stopsNorm = Math.Min(1m, projectedStops / 60m);
             decimal hoursNorm = Math.Min(1m, projectedHours / 10m);
             decimal distanceNorm = Math.Min(1m, projectedDistance / 200m);
 
-            // Calculate overload score
             decimal overloadScore = Math.Round(
                 0.50m * stopsNorm +
                 0.30m * hoursNorm +
                 0.20m * distanceNorm
             , 4);
 
-            // Determine status
             string status;
             if (overloadScore < 0.75m)
                 status = "SAFE";
@@ -107,44 +100,36 @@ namespace ShiftSync.Api.Services
             if (driver == null) throw new Exception("Driver not found");
             if (load == null) throw new Exception("Load not found");
 
-            // Use UTC date range for PostgreSQL compatibility
             var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
             var todayEnd = todayStart.AddDays(1);
 
-            // 1. Region Score (100 if match, 50 if not)
             decimal regionScore = driver.Region.Equals(load.Region, StringComparison.OrdinalIgnoreCase) ? 100m : 50m;
 
-            // 2. Workload Score (less work today = higher score)
             var todayAssignments = await _context.ShiftAssignments
                 .Include(s => s.Load)
                 .Where(s => s.DriverId == driverId &&
-                           s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
-                           s.Status != "COMPLETED")
+                            s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
+                            s.Status != "COMPLETED")
                 .ToListAsync();
 
             decimal currentHours = todayAssignments.Sum(a => a.Load?.EstimatedHours ?? 0);
             decimal workloadNorm = 100m - (Math.Min(1m, currentHours / 10m) * 100m);
 
-            // 3. Fatigue Score (lower fatigue = higher suitability)
             decimal fatigueNorm = 100m - driver.FatigueScore;
 
-            // 4. Distance Score (less distance today = higher score)
             decimal currentDistance = todayAssignments.Sum(a => a.Load?.EstimatedDistance ?? 0);
             decimal distanceNorm = 100m - (Math.Min(1m, currentDistance / 200m) * 100m);
 
-            // 5. Rotation Penalty (-20 if worked 5+ consecutive days)
             decimal rotationPenalty = driver.ConsecutiveDays >= 5 ? -20m : 0m;
 
-            // Calculate final suitability score
             decimal suitabilityScore = Math.Round(
                 0.30m * regionScore +
                 0.25m * workloadNorm +
                 0.25m * fatigueNorm +
                 0.10m * distanceNorm +
-                0.10m * (100m + rotationPenalty) // Convert penalty to 0-100 scale
+                0.10m * (100m + rotationPenalty)
             , 2);
 
-            // Clamp to 0-100
             suitabilityScore = Math.Max(0m, Math.Min(100m, suitabilityScore));
 
             return new SuitabilityResult
@@ -168,9 +153,6 @@ namespace ShiftSync.Api.Services
 
         #region Driver Eligibility Check
 
-        /// <summary>
-        /// Checks if a driver is eligible for assignment.
-        /// </summary>
         public async Task<EligibilityResult> CheckDriverEligibility(int driverId, int loadId)
         {
             var driver = await _context.Drivers.FindAsync(driverId);
@@ -180,14 +162,12 @@ namespace ShiftSync.Api.Services
             var reasons = new List<string>();
             bool isEligible = true;
 
-            // 1. Check if driver is active
             if (driver.Status != "ACTIVE")
             {
                 isEligible = false;
                 reasons.Add("Driver is inactive");
             }
 
-            // 2. Check if today is driver's weekly off
             var todayDayOfWeek = DateTime.UtcNow.DayOfWeek.ToString().ToUpper();
             if (driver.WeeklyOff.ToUpper() == todayDayOfWeek)
             {
@@ -195,21 +175,18 @@ namespace ShiftSync.Api.Services
                 reasons.Add($"Today is driver's weekly off ({driver.WeeklyOff})");
             }
 
-            // 3. Check if fatigue score > 85 (forced rest)
             if (driver.FatigueScore > 85)
             {
                 isEligible = false;
                 reasons.Add($"Fatigue score too high ({driver.FatigueScore}/100) - driver needs rest");
             }
 
-            // 4. Check if driver already has 3+ loads assigned today
-            // Use UTC date range for PostgreSQL compatibility
             var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
             var todayEnd = todayStart.AddDays(1);
             var todayLoadCount = await _context.ShiftAssignments
                 .CountAsync(s => s.DriverId == driverId &&
-                                s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
-                                s.Status != "COMPLETED");
+                                 s.AssignedDate >= todayStart && s.AssignedDate < todayEnd &&
+                                 s.Status != "COMPLETED");
 
             if (todayLoadCount >= 3)
             {
@@ -217,7 +194,6 @@ namespace ShiftSync.Api.Services
                 reasons.Add($"Driver already has {todayLoadCount} active loads today (max 3)");
             }
 
-            // 5. Check if current overload score > 0.90
             if (loadId > 0)
             {
                 var overload = await CalculateOverloadScore(driverId, loadId);
@@ -228,7 +204,6 @@ namespace ShiftSync.Api.Services
                 }
             }
 
-            // 6. Check if driver has checked in today (using in-memory filter for PostgreSQL compatibility)
             var driverAttendances = await _context.Attendances
                 .Where(a => a.DriverId == driverId)
                 .ToListAsync();
@@ -255,9 +230,6 @@ namespace ShiftSync.Api.Services
 
         #region Auto Assignment Engine
 
-        /// <summary>
-        /// Gets recommended drivers for a load, ranked by suitability score.
-        /// </summary>
         public async Task<AssignmentRecommendation> GetRecommendations(int loadId)
         {
             var load = await _context.Loads.FindAsync(loadId);
@@ -318,7 +290,6 @@ namespace ShiftSync.Api.Services
                 }
             }
 
-            // Sort: Eligible first (by suitability desc), then ineligible
             var sortedRecommendations = recommendations
                 .OrderByDescending(r => r.IsEligible)
                 .ThenByDescending(r => r.SuitabilityScore)
@@ -340,9 +311,6 @@ namespace ShiftSync.Api.Services
             };
         }
 
-        /// <summary>
-        /// Assigns a load to a driver (manual or auto).
-        /// </summary>
         public async Task<AssignmentResult> AssignLoad(int loadId, int driverId, bool isOverride = false)
         {
             var load = await _context.Loads.FindAsync(loadId);
@@ -353,7 +321,6 @@ namespace ShiftSync.Api.Services
             if (load.Status != "PENDING")
                 throw new Exception($"Load is not pending (current status: {load.Status})");
 
-            // Check eligibility unless override
             if (!isOverride)
             {
                 var eligibility = await CheckDriverEligibility(driverId, loadId);
@@ -361,15 +328,12 @@ namespace ShiftSync.Api.Services
                     throw new Exception($"Driver not eligible: {eligibility.Reason}");
             }
 
-            // Calculate scores
             var suitability = await CalculateSuitabilityScore(driverId, loadId);
             var overload = await CalculateOverloadScore(driverId, loadId);
 
-            // Check overload unless override
             if (!isOverride && overload.Status == "UNSAFE")
                 throw new Exception("Assignment would cause unsafe overload. Use override if necessary.");
 
-            // Create shift assignment
             var assignment = new ShiftAssignment
             {
                 DriverId = driverId,
@@ -385,12 +349,10 @@ namespace ShiftSync.Api.Services
 
             _context.ShiftAssignments.Add(assignment);
 
-            // Update load status
             load.Status = "ASSIGNED";
             load.AssignedDriverId = driverId;
             load.AssignedAt = DateTime.UtcNow;
 
-            // Update driver's last assignment date
             driver.LastAssignmentDate = DateTime.UtcNow;
             driver.UpdatedAt = DateTime.UtcNow;
 
@@ -414,9 +376,6 @@ namespace ShiftSync.Api.Services
             };
         }
 
-        /// <summary>
-        /// Auto-assigns a load to the best available driver.
-        /// </summary>
         public async Task<AssignmentResult> AutoAssign(int loadId)
         {
             var recommendations = await GetRecommendations(loadId);
@@ -434,6 +393,158 @@ namespace ShiftSync.Api.Services
             return await AssignLoad(loadId, recommendations.TopRecommendation.DriverId, isOverride: false);
         }
 
+        /// <summary>
+        /// Bulk auto-assign multiple loads with fair distribution:
+        /// - Prefer drivers in same region as load
+        /// - Max 3 active loads per driver (soft cap)
+        /// </summary>
+        public async Task<List<AssignmentResult>> AutoAssignBatch(List<int> loadIds)
+        {
+            var results = new List<AssignmentResult>();
+
+            if (loadIds == null || loadIds.Count == 0)
+                return results;
+
+            var loads = await _context.Loads
+                .Where(l => loadIds.Contains(l.LoadId) && l.Status == "PENDING")
+                .OrderByDescending(l => l.Priority == "HIGH")
+                .ThenByDescending(l => l.Priority == "MEDIUM")
+                .ThenBy(l => l.CreatedAt)
+                .ToListAsync();
+
+            if (!loads.Any())
+                return results;
+
+            var activeDrivers = await _context.Drivers
+                .Where(d => d.Status == "ACTIVE")
+                .ToListAsync();
+
+            if (!activeDrivers.Any())
+            {
+                foreach (var load in loads)
+                {
+                    results.Add(new AssignmentResult
+                    {
+                        Success = false,
+                        LoadId = load.LoadId,
+                        LoadRef = load.LoadRef,
+                        Message = "No active drivers available"
+                    });
+                }
+                return results;
+            }
+
+            var todayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+            var todayEnd = todayStart.AddDays(1);
+
+            var todayAssignments = await _context.ShiftAssignments
+                .Where(a => a.AssignedDate >= todayStart &&
+                            a.AssignedDate < todayEnd &&
+                            a.Status != "COMPLETED")
+                .ToListAsync();
+
+            var activeLoadCounts = activeDrivers
+                .ToDictionary(
+                    d => d.DriverId,
+                    d => todayAssignments.Count(a => a.DriverId == d.DriverId)
+                );
+
+            bool DriverHasCapacity(int driverId) =>
+                !activeLoadCounts.TryGetValue(driverId, out var c) || c < 3;
+
+            DriverRecommendation? PickBest(List<DriverRecommendation> candidates)
+            {
+                if (!candidates.Any()) return null;
+
+                var withCapacity = candidates
+                    .Where(r => DriverHasCapacity(r.DriverId))
+                    .ToList();
+
+                if (withCapacity.Any())
+                {
+                    return withCapacity
+                        .OrderBy(r => r.FatigueScore)
+                        .ThenByDescending(r => r.SuitabilityScore)
+                        .First();
+                }
+
+                return candidates
+                    .OrderBy(r => r.FatigueScore)
+                    .ThenByDescending(r => r.SuitabilityScore)
+                    .First();
+            }
+
+            foreach (var load in loads)
+            {
+                try
+                {
+                    var rec = await GetRecommendations(load.LoadId);
+                    var eligible = rec.Recommendations
+                        .Where(r => r.IsEligible)
+                        .ToList();
+
+                    if (!eligible.Any())
+                    {
+                        results.Add(new AssignmentResult
+                        {
+                            Success = false,
+                            LoadId = load.LoadId,
+                            LoadRef = load.LoadRef,
+                            Message = "No eligible drivers for this load"
+                        });
+                        continue;
+                    }
+
+                    var sameRegion = eligible
+                        .Where(r => r.RegionMatch)
+                        .ToList();
+
+                    var crossRegion = eligible
+                        .Where(r => !r.RegionMatch)
+                        .ToList();
+
+                    var chosen = PickBest(sameRegion) ?? PickBest(crossRegion);
+
+                    if (chosen == null)
+                    {
+                        results.Add(new AssignmentResult
+                        {
+                            Success = false,
+                            LoadId = load.LoadId,
+                            LoadRef = load.LoadRef,
+                            Message = "No suitable driver found"
+                        });
+                        continue;
+                    }
+
+                    var assignResult = await AssignLoad(load.LoadId, chosen.DriverId, isOverride: false);
+                    results.Add(assignResult);
+
+                    if (assignResult.Success)
+                    {
+                        if (!activeLoadCounts.ContainsKey(chosen.DriverId))
+                            activeLoadCounts[chosen.DriverId] = 0;
+
+                        activeLoadCounts[chosen.DriverId] += 1;
+
+                        await _fatigueService.UpdateDriverFatigueScore(chosen.DriverId);
+                    }
+                }
+                catch (Exception exLoad)
+                {
+                    results.Add(new AssignmentResult
+                    {
+                        Success = false,
+                        LoadId = load.LoadId,
+                        LoadRef = load.LoadRef,
+                        Message = exLoad.Message
+                    });
+                }
+            }
+
+            return results;
+        }
+
         #endregion
     }
 
@@ -445,7 +556,7 @@ namespace ShiftSync.Api.Services
         public string DriverName { get; set; } = string.Empty;
         public int LoadId { get; set; }
         public decimal OverloadScore { get; set; }
-        public string Status { get; set; } = string.Empty; // SAFE, WARNING, UNSAFE
+        public string Status { get; set; } = string.Empty;
         public int CurrentStops { get; set; }
         public decimal CurrentHours { get; set; }
         public decimal CurrentDistance { get; set; }

@@ -28,7 +28,6 @@ namespace ShiftSync.Api.Controllers
         {
             try
             {
-                // Use UTC dates for PostgreSQL compatibility
                 var start = DateTime.SpecifyKind(startDate?.Date ?? DateTime.UtcNow.AddDays(-7).Date, DateTimeKind.Utc);
                 var end = DateTime.SpecifyKind(endDate?.Date ?? DateTime.UtcNow.Date, DateTimeKind.Utc).AddDays(1);
 
@@ -88,7 +87,6 @@ namespace ShiftSync.Api.Controllers
         {
             try
             {
-                // Use UTC dates for PostgreSQL compatibility
                 var start = DateTime.SpecifyKind(startDate?.Date ?? DateTime.UtcNow.AddDays(-7).Date, DateTimeKind.Utc);
                 var end = DateTime.SpecifyKind(endDate?.Date ?? DateTime.UtcNow.Date, DateTimeKind.Utc).AddDays(1);
 
@@ -101,20 +99,29 @@ namespace ShiftSync.Api.Controllers
 
                 var assignments = await _context.ShiftAssignments
                     .Include(s => s.Load)
-                    .Where(s => driverIds.Contains(s.DriverId) && s.AssignedDate >= start && s.AssignedDate < end)
+                    .Where(s => driverIds.Contains(s.DriverId) &&
+                                s.AssignedDate >= start && s.AssignedDate < end)
                     .ToListAsync();
 
                 var report = drivers.Select(driver =>
                 {
-                    var driverAssignments = assignments.Where(a => a.DriverId == driver.DriverId).ToList();
+                    var driverAssignments = assignments
+                        .Where(a => a.DriverId == driver.DriverId)
+                        .ToList();
+
+                    var totalLoads = driverAssignments.Count;
+                    var completed = driverAssignments.Count(a => a.Status == "COMPLETED");
+                    // Treat everything not completed in this period as "in progress / active"
+                    var active = driverAssignments.Count(a => a.Status != "COMPLETED");
+
                     return new
                     {
                         driver.DriverId,
                         driver.Name,
                         driver.Region,
-                        TotalLoadsAssigned = driverAssignments.Count,
-                        CompletedLoads = driverAssignments.Count(a => a.Status == "COMPLETED"),
-                        InProgressLoads = driverAssignments.Count(a => a.Status == "IN_PROGRESS"),
+                        TotalLoadsAssigned = totalLoads,
+                        CompletedLoads = completed,
+                        InProgressLoads = active,
                         TotalStops = driverAssignments.Sum(a => a.Load?.Stops ?? 0),
                         TotalDistance = Math.Round(driverAssignments.Sum(a => a.Load?.EstimatedDistance ?? 0), 2),
                         TotalEstimatedHours = Math.Round(driverAssignments.Sum(a => a.Load?.EstimatedHours ?? 0), 2),
@@ -122,7 +129,9 @@ namespace ShiftSync.Api.Controllers
                             ? Math.Round(driverAssignments.Average(a => a.SuitabilityScore), 2)
                             : 0
                     };
-                }).OrderByDescending(r => r.TotalLoadsAssigned).ToList();
+                })
+                .OrderByDescending(r => r.TotalLoadsAssigned)
+                .ToList();
 
                 return Ok(new
                 {
@@ -149,7 +158,6 @@ namespace ShiftSync.Api.Controllers
         {
             try
             {
-                // Use UTC dates for PostgreSQL compatibility
                 var start = DateTime.SpecifyKind(startDate?.Date ?? DateTime.UtcNow.AddDays(-7).Date, DateTimeKind.Utc);
                 var end = DateTime.SpecifyKind(endDate?.Date ?? DateTime.UtcNow.Date, DateTimeKind.Utc).AddDays(1);
 
@@ -165,7 +173,7 @@ namespace ShiftSync.Api.Controllers
                         d.ConsecutiveDays,
                         d.LastAssignmentDate,
                         FatigueLevel = d.FatigueScore <= 40 ? "LOW" :
-                                      d.FatigueScore <= 70 ? "MEDIUM" : "HIGH",
+                                       d.FatigueScore <= 70 ? "MEDIUM" : "HIGH",
                         NeedsRest = d.FatigueScore > 85
                     })
                     .ToListAsync();
@@ -218,7 +226,6 @@ namespace ShiftSync.Api.Controllers
         {
             try
             {
-                // Use UTC dates for PostgreSQL compatibility
                 var start = DateTime.SpecifyKind(startDate?.Date ?? DateTime.UtcNow.AddDays(-7).Date, DateTimeKind.Utc);
                 var end = DateTime.SpecifyKind(endDate?.Date ?? DateTime.UtcNow.Date, DateTimeKind.Utc).AddDays(1);
 
@@ -296,7 +303,6 @@ namespace ShiftSync.Api.Controllers
                 if (driver == null)
                     return NotFound(new { error = "Driver not found" });
 
-                // Use UTC dates for PostgreSQL compatibility
                 var start = DateTime.SpecifyKind(startDate?.Date ?? DateTime.UtcNow.AddDays(-7).Date, DateTimeKind.Utc);
                 var end = DateTime.SpecifyKind(endDate?.Date ?? DateTime.UtcNow.Date, DateTimeKind.Utc).AddDays(1);
 
