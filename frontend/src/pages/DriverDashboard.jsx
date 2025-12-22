@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   FiClock, FiPackage, FiActivity, FiMapPin, FiLogOut, FiTruck, FiKey,
-  FiRefreshCw, FiAlertCircle, FiCheckCircle
+  FiRefreshCw, FiAlertCircle, FiCheckCircle, FiX, FiInfo
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import StatCard from "../components/StatCard";
@@ -9,7 +9,7 @@ import {
   getDriverDashboard,
   checkInDriver,
   checkOutDriver,
-  completeLoad // ✅ ADD THIS
+  completeLoad
 } from "../services/driverService";
 
 function DriverDashboard() {
@@ -19,9 +19,11 @@ function DriverDashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
-
-  // ✅ NEW: load completion button loading state
   const [completeLoadingId, setCompleteLoadingId] = useState(null);
+  
+  // ✅ NEW: Modal state for load details
+  const [selectedLoad, setSelectedLoad] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
@@ -94,66 +96,68 @@ function DriverDashboard() {
     navigate("/driver/reset-password");
   };
 
-  // ✅ NEW: complete a load
   const handleCompleteLoad = async (assignment) => {
-  try {
-    setActionError("");
+    try {
+      setActionError("");
 
-    const loadId = assignment?.loadId;
-    if (!loadId) {
-      setActionError("LoadId not found in assignments data. Please add loadId in the dashboard API response.");
-      return;
+      const loadId = assignment?.loadId;
+      if (!loadId) {
+        setActionError("LoadId not found in assignments data. Please add loadId in the dashboard API response.");
+        return;
+      }
+
+      setCompleteLoadingId(loadId);
+
+      await completeLoad(loadId);
+
+      setDashboardData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          assignments: (prev.assignments || []).map(a =>
+            a.loadId === loadId ? { ...a, status: "COMPLETED" } : a
+          )
+        };
+      });
+
+      await fetchDashboardData();
+
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        (typeof err?.response?.data === "string" ? err.response.data : "") ||
+        err?.message ||
+        "Failed to mark as completed.";
+
+      setActionError(msg);
+
+    } finally {
+      setCompleteLoadingId(null);
     }
+  };
 
-    setCompleteLoadingId(loadId);
+  // ✅ NEW: Handle view details
+  const handleViewDetails = (assignment) => {
+    setSelectedLoad(assignment);
+    setShowDetailsModal(true);
+  };
 
-    await completeLoad(loadId);
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedLoad(null);
+  };
 
-    // ✅ Update UI immediately (optimistic update)
-    setDashboardData(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        assignments: (prev.assignments || []).map(a =>
-          a.loadId === loadId ? { ...a, status: "COMPLETED" } : a
-        )
-      };
-    });
-
-    // Optional but recommended: keep backend & UI in sync
-    await fetchDashboardData();
-
-  } catch (err) {
-    const msg =
-    err?.response?.data?.message ||
-    (typeof err?.response?.data === "string" ? err.response.data : "") ||
-    err?.message ||
-    "Failed to mark as completed.";
-
-  setActionError(msg);
-
-  } finally {
-    setCompleteLoadingId(null);
-  }
-};
-
-
-  // Determine check-in state from attendance data
   const isCheckedIn = dashboardData?.todayAttendance?.checkInTime && !dashboardData?.todayAttendance?.checkOutTime;
   const hasCheckedOut = dashboardData?.todayAttendance?.checkInTime && dashboardData?.todayAttendance?.checkOutTime;
 
-  // Calculate hours worked
-  const calculateHoursWorked = () => {
-    const attendance = dashboardData?.todayAttendance;
-    if (!attendance?.checkInTime) return "0h 0m";
+  const formatTotalHours = (hoursDecimal) => {
+  if (hoursDecimal == null) return "0h 0m";
 
-    const checkIn = new Date(attendance.checkInTime);
-    const checkOut = attendance.checkOutTime ? new Date(attendance.checkOutTime) : new Date();
-    const diffMs = checkOut - checkIn;
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
-  };
+  const hours = Math.floor(hoursDecimal);
+  const minutes = Math.round((hoursDecimal - hours) * 60);
+
+  return `${hours}h ${minutes}m`;
+};
 
   const formatTime = (dateString) => {
     if (!dateString) return "N/A";
@@ -164,7 +168,6 @@ function DriverDashboard() {
     });
   };
 
-  // Get status color for assignments
   const getStatusStyle = (status) => {
     const upperStatus = status?.toUpperCase() || "";
     if (upperStatus === "COMPLETED" || upperStatus === "COMPLETE") {
@@ -172,11 +175,21 @@ function DriverDashboard() {
     } else if (upperStatus === "IN_PROGRESS" || upperStatus === "IN PROGRESS" || upperStatus === "INPROGRESS") {
       return { background: "#dbeafe", color: "#1e40af" };
     } else {
-      return { background: "#fef3c7", color: "#92400e" }; // Pending/Assigned/Default
+      return { background: "#fef3c7", color: "#92400e" };
     }
   };
 
-  // Loading state
+  const getPriorityStyle = (priority) => {
+    const upperPriority = priority?.toUpperCase() || "";
+    if (upperPriority === "HIGH" || upperPriority === "URGENT") {
+      return { background: "#fee2e2", color: "#991b1b" };
+    } else if (upperPriority === "MEDIUM") {
+      return { background: "#fef3c7", color: "#92400e" };
+    } else {
+      return { background: "#e0e7ff", color: "#3730a3" };
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -194,7 +207,6 @@ function DriverDashboard() {
     );
   }
 
-  // Error state with retry
   if (error) {
     return (
       <div style={{
@@ -246,7 +258,6 @@ function DriverDashboard() {
   const attendance = dashboardData?.todayAttendance;
   const assignments = dashboardData?.assignments || [];
 
-  // ✅ reusable renderer for assignments list (used in both checked-in and checked-out)
   const renderAssignments = () => {
     if (assignments.length === 0) {
       return (
@@ -259,14 +270,16 @@ function DriverDashboard() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         {assignments.map((assignment) => {
+          // ✅ Access nested LoadDetails object
+          const loadDetails = assignment.loadDetails;
           const statusUpper = (assignment.status || "").toUpperCase();
           const canComplete = statusUpper === "ASSIGNED";
-          const loadId = assignment.loadId; // ✅ must be present from API
+          const loadId = loadDetails?.loadId;
           const isCompleting = completeLoadingId && loadId && completeLoadingId === loadId;
 
           return (
             <div
-              key={assignment.assignmentId ?? assignment.loadRef}
+              key={assignment.assignmentId ?? loadDetails?.loadRef}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -274,14 +287,15 @@ function DriverDashboard() {
                 padding: "12px",
                 background: "#f9fafb",
                 borderRadius: "8px",
-                gap: "12px"
+                gap: "12px",
+                flexWrap: "wrap"
               }}
             >
               <span style={{ fontSize: "14px", fontWeight: "500", color: "#111827" }}>
-                {assignment.loadRef}
+                {loadDetails?.loadRef || "N/A"}
               </span>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 <span
                   style={{
                     fontSize: "12px",
@@ -294,9 +308,42 @@ function DriverDashboard() {
                   {assignment.status}
                 </span>
 
-                {canComplete && (
+                {/* ✅ View Details Button - only show if loadDetails exists */}
+                {loadDetails && (
                   <button
-                    onClick={() => handleCompleteLoad(assignment)}
+                    onClick={() => handleViewDetails(loadDetails)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1d5db",
+                      cursor: "pointer",
+                      background: "#fff",
+                      color: "#374151",
+                      fontSize: "13px",
+                      fontWeight: "500",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = "#f3f4f6";
+                      e.currentTarget.style.borderColor = "#9ca3af";
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = "#fff";
+                      e.currentTarget.style.borderColor = "#d1d5db";
+                    }}
+                    title="View load details"
+                  >
+                    <FiInfo />
+                    Details
+                  </button>
+                )}
+
+                {canComplete && loadDetails && (
+                  <button
+                    onClick={() => handleCompleteLoad({ ...assignment, loadId: loadDetails.loadId })}
                     disabled={!!isCompleting}
                     style={{
                       display: "flex",
@@ -411,7 +458,7 @@ function DriverDashboard() {
         <StatCard label="Weekly Off" value={weeklyOff} icon={FiClock} variant="default" />
         <StatCard
           label="Fatigue Score"
-          value={`${parseFloat(fatigueScore).toFixed(1)}/10`}
+          value={`${parseFloat(fatigueScore).toFixed(1)}/100`}
           icon={FiActivity}
           variant={fatigueScore > 7 ? "red" : fatigueScore > 5 ? "yellow" : "green"}
         />
@@ -419,7 +466,6 @@ function DriverDashboard() {
 
       {/* Main Content based on check-in state */}
       {!isCheckedIn && !hasCheckedOut ? (
-        /* BEFORE CHECK-IN VIEW */
         <section>
           <div style={{
             textAlign: "center", padding: "40px 24px", background: "#fff",
@@ -462,7 +508,6 @@ function DriverDashboard() {
           </div>
         </section>
       ) : hasCheckedOut ? (
-        /* AFTER CHECK-OUT VIEW */
         <section>
           <div style={{
             textAlign: "center", padding: "40px 24px",
@@ -474,14 +519,13 @@ function DriverDashboard() {
               Shift Completed!
             </h2>
             <p style={{ fontSize: "14px", opacity: 0.9, marginBottom: "16px" }}>
-              Great work today! You worked for <strong>{calculateHoursWorked()}</strong>
+              Great work today! You worked for <strong>{formatTotalHours(attendance?.totalHours)}</strong>
             </p>
             <p style={{ fontSize: "12px", opacity: 0.8 }}>
               Check-in: {formatTime(attendance?.checkInTime)} | Check-out: {formatTime(attendance?.checkOutTime)}
             </p>
           </div>
 
-          {/* Assignments Card */}
           <div style={{
             background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb",
             boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
@@ -499,7 +543,6 @@ function DriverDashboard() {
           </div>
         </section>
       ) : (
-        /* CHECKED-IN VIEW */
         <>
           <section style={{ marginBottom: "20px" }}>
             <div style={{
@@ -511,7 +554,8 @@ function DriverDashboard() {
                 You're Checked In!
               </h2>
               <p style={{ fontSize: "14px", opacity: 0.9, marginBottom: "18px" }}>
-                Working for <strong>{calculateHoursWorked()}</strong> today
+                Working for <strong>{formatTotalHours(attendance?.totalHours)}
+</strong> today
               </p>
               <button
                 onClick={handleCheckOut}
@@ -544,7 +588,6 @@ function DriverDashboard() {
             gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
             gap: "16px"
           }}>
-            {/* Assignments Card */}
             <div style={{
               background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb",
               boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
@@ -561,7 +604,6 @@ function DriverDashboard() {
               </div>
             </div>
 
-            {/* Working Hours Card */}
             <div style={{
               background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb",
               boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
@@ -596,7 +638,7 @@ function DriverDashboard() {
                       Hours Worked
                     </p>
                     <p style={{ fontSize: "22px", fontWeight: "600", color: "#047857", margin: 0 }}>
-                      {calculateHoursWorked()}
+                      {formatTotalHours(attendance?.totalHours)}
                     </p>
                   </div>
                 </div>
@@ -604,6 +646,271 @@ function DriverDashboard() {
             </div>
           </section>
         </>
+      )}
+
+      {/* ✅ NEW: Load Details Modal */}
+      {showDetailsModal && selectedLoad && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "16px"
+          }}
+          onClick={closeDetailsModal}
+        >
+          <div
+            style={{
+              background: "#ffffffff",
+              borderRadius: "12px",
+              maxWidth: "600px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflow: "auto",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: "20px",
+              borderBottom: "1px solid #e5e7eb",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "8px",
+                  background: "#dbeafe",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#3b82f6",
+                  fontSize: "20px"
+                }}>
+                  <FiPackage />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    Load Details
+                  </h2>
+                  <p style={{ fontSize: "13px", color: "#6b7280", margin: "2px 0 0 0" }}>
+                    {selectedLoad.loadRef}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeDetailsModal}
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: "#f3f4f6",
+                  color: "#6b7280",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "18px",
+                  transition: "all 0.2s"
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = "#e5e7eb";
+                  e.currentTarget.style.color = "#374151";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = "#f3f4f6";
+                  e.currentTarget.style.color = "#6b7280";
+                }}
+              >
+                <FiX />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "24px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px" }}>
+                {/* Load ID */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Load ID
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.loadId || "N/A"}
+                  </p>
+                </div>
+
+                {/* Load Reference */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Load Reference
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.loadRef || "N/A"}
+                  </p>
+                </div>
+
+                {/* Region */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Region
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.region || "N/A"}
+                  </p>
+                </div>
+
+                {/* Stops */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Stops
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.stops || "N/A"}
+                  </p>
+                </div>
+
+                {/* Estimated Hours */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Estimated Hours
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.estimatedHours ? `${selectedLoad.estimatedHours} hrs` : "N/A"}
+                  </p>
+                </div>
+
+                {/* Estimated Distance */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Estimated Distance
+                  </p>
+                  <p style={{ fontSize: "16px", fontWeight: "600", color: "#111827", margin: 0 }}>
+                    {selectedLoad.estimatedDistance ? `${selectedLoad.estimatedDistance} km` : "N/A"}
+                  </p>
+                </div>
+
+                {/* Priority */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Priority
+                  </p>
+                  <span style={{
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    padding: "6px 12px",
+                    borderRadius: "12px",
+                    display: "inline-block",
+                    ...getPriorityStyle(selectedLoad.priority)
+                  }}>
+                    {selectedLoad.priority || "N/A"}
+                  </span>
+                </div>
+
+                {/* Status */}
+                <div style={{
+                  padding: "16px",
+                  background: "#f9fafb",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e7eb"
+                }}>
+                  <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                    Status
+                  </p>
+                  <span style={{
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    padding: "6px 12px",
+                    borderRadius: "12px",
+                    display: "inline-block",
+                    ...getStatusStyle(selectedLoad.status)
+                  }}>
+                    {selectedLoad.status || "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: "16px 24px",
+              borderTop: "1px solid #e5e7eb",
+              display: "flex",
+              justifyContent: "flex-end"
+            }}>
+              <button
+                onClick={closeDetailsModal}
+                style={{
+                  padding: "10px 24px",
+                  background: "#111827",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = "#374151";
+                  e.currentTarget.style.color = "#ffffff";
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = "#111827";
+                  e.currentTarget.style.color = "#ffffff";
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

@@ -67,8 +67,7 @@ namespace ShiftSync.Api.Services
                 restGapHours = (decimal)(DateTime.UtcNow - lastCheckout.CheckOutTime.Value).TotalHours;
             }
 
-            // Normalize: 12+ hours rest = 0 fatigue, 0 hours rest = max fatigue (1.0)
-            decimal restGapNorm = Math.Max(0m, 1m - (restGapHours / 12m));
+            decimal restGapNorm = Math.Max(0m, Math.Min(1m, 1m - (restGapHours / 12m)));
 
             // 5. Heavy stop density - average stops from last 3 days assignments
             var last3DaysAssignments = await _context.ShiftAssignments

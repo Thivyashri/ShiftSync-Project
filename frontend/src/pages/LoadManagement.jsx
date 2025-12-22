@@ -104,9 +104,9 @@ function Modal({ title, children, onClose }) {
 // =================== MAIN COMPONENT =================== //
 function LoadManagement() {
   // Filters
-  const [dateFilter, setDateFilter] = useState("All");
   const [regionFilter, setRegionFilter] = useState("All Regions");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
+  const [allRegions, setAllRegions] = useState([]);
 
   // Data
   const [loads, setLoads] = useState([]);
@@ -144,30 +144,17 @@ function LoadManagement() {
     priority: ""
   });
 
-  // Dropdown options
-  const dateOptions = useMemo(
-    () => [
-      { label: "Today", value: "Today" },
-      { label: "All Dates", value: "All" },
-    ],
-    []
-  );
-
   // Dynamic region options
   const regionOptions = useMemo(() => {
-    const uniqueAreas = Array.from(
-      new Set(
-        loads
-          .map((l) => (l.area ?? "").trim())
-          .filter((v) => v.length > 0)
-      )
-    ).sort((a, b) => a.localeCompare(b));
+  return [
+    { label: "All Regions", value: "All Regions" },
+    ...allRegions.map((region) => ({
+      label: region,
+      value: region,
+    })),
+  ];
+}, [allRegions]);
 
-    return [
-      { label: "All Regions", value: "All Regions" },
-      ...uniqueAreas.map((area) => ({ label: area, value: area })),
-    ];
-  }, [loads]);
 
   useEffect(() => {
     if (regionFilter !== "All Regions") {
@@ -181,7 +168,6 @@ function LoadManagement() {
       { label: "All Statuses", value: "All Statuses" },
       { label: "Pending", value: "PENDING" },
       { label: "Assigned", value: "ASSIGNED" },
-      { label: "In Progress", value: "IN_PROGRESS" },
       { label: "Completed", value: "COMPLETED" },
     ],
     []
@@ -252,14 +238,6 @@ function LoadManagement() {
     if (regionFilter !== "All Regions") params.set("region", regionFilter);
     if (statusFilter !== "All Statuses") params.set("status", statusFilter);
 
-    if (dateFilter === "Today") {
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, "0");
-      const dd = String(today.getDate()).padStart(2, "0");
-      params.set("date", `${yyyy}-${mm}-${dd}`);
-    }
-
     return params.toString();
   };
 
@@ -321,6 +299,7 @@ function LoadManagement() {
 
       setLoads(Array.isArray(loadsData) ? loadsData.map(mapRowForUI) : []);
       setStats(statsData);
+      
     } catch (e) {
       console.error(e);
       setError(e.message || "Something went wrong");
@@ -331,7 +310,7 @@ function LoadManagement() {
 
   useEffect(() => {
     fetchLoadsAndStats();
-  }, [dateFilter, regionFilter, statusFilter]);
+  }, [regionFilter, statusFilter]);
 
   // ---------- Actions ----------
   const openAdd = () => {
@@ -350,6 +329,11 @@ function LoadManagement() {
     });
     setShowAdd(true);
   };
+
+  const clearFilters = () => {
+  setRegionFilter("All Regions");
+  setStatusFilter("All Statuses");
+};
 
   const onCreateLoad = async () => {
     setError("");
@@ -582,7 +566,6 @@ function LoadManagement() {
 
       <section className="card filters-card">
         <div className="filters-grid">
-          <FilterDropdown label="Date" value={dateFilter} options={dateOptions} onChange={setDateFilter} />
           <FilterDropdown label="Region" value={regionFilter} options={regionOptions} onChange={setRegionFilter} />
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
         </div>

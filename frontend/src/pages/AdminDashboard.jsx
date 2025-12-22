@@ -226,9 +226,6 @@ function AdminDashboard() {
 
                 <div className="alert-content">
                   <div className="alert-title">{alert.message}</div>
-                  <div className="alert-time">
-                    Consecutive days: {alert.consecutiveDays}
-                  </div>
                 </div>
               </div>
             ))

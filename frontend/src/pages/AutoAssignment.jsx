@@ -105,7 +105,22 @@ function AutoAssignment() {
         getAllLoads({ status: 'PENDING' }),
       ]);
 
-      setStats(statsRes.data);
+      const assignmentsToday = assignmentsRes.data || [];
+const pending = loadsRes.data || [];
+console.log(assignmentsToday);
+const completedCount = assignmentsToday.filter(a => a.status === "COMPLETED").length;
+const assignedCount = assignmentsToday.filter(a => a.status === "ASSIGNED").length;
+const inProgressCount = assignmentsToday.filter(a => a.status === "IN_PROGRESS").length;
+const overrideCount = assignmentsToday.filter(a => a.isOverride).length;
+
+setStats({
+  totalAssignmentsToday: assignmentsToday.length,
+  completedToday: completedCount,
+  inProgressToday: assignmentsToday.length - completedCount,
+  pendingLoads: pending.length,
+  overrideAssignmentsToday: overrideCount,
+});
+
       setAssignments(assignmentsRes.data);
       setPendingLoads(loadsRes.data || []);
     } catch (err) {
