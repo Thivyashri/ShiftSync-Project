@@ -136,7 +136,6 @@ function Reports() {
               <th>Days Present</th>
               <th>Days Absent</th>
               <th>Late Check-ins</th>
-              <th>Total Hours</th>
               <th>Avg Hours/Day</th>
               <th>Overtime Days</th>
             </tr>
@@ -162,7 +161,6 @@ function Reports() {
                   <td>
                     <CountPill value={row.daysLate} variant="muted" />
                   </td>
-                  <td style={{ fontWeight: 500 }}>{row.totalHoursWorked}h</td>
                   <td>{row.averageHoursPerDay}h</td>
                   <td>
                     <CountPill value={row.overtimeDays} variant={row.overtimeDays > 3 ? "danger" : "light"} />
@@ -489,29 +487,6 @@ function Reports() {
       {/* Filters */}
       <section className="card panel" style={{ marginBottom: "24px" }}>
         <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <FiCalendar size={16} style={{ color: "#6b7280" }} />
-            <label style={{ fontSize: "14px", color: "#374151", fontWeight: 500 }}>Date Range:</label>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              style={{
-                padding: "8px 12px",
-                borderRadius: "6px",
-                border: "1px solid #d1d5db",
-                fontSize: "14px",
-                backgroundColor: "white",
-                cursor: "pointer"
-              }}
-            >
-              <option value="7">Last 7 Days</option>
-              <option value="14">Last 14 Days</option>
-              <option value="30">Last 30 Days</option>
-              <option value="60">Last 60 Days</option>
-              <option value="90">Last 90 Days</option>
-            </select>
-          </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <label style={{ fontSize: "14px", color: "#374151", fontWeight: 500 }}>Region:</label>
             <select

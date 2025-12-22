@@ -61,71 +61,87 @@ namespace ShiftSync.Api.Controllers
             }
         }
 
-        // GET /api/driver/dashboard
-        [HttpGet("dashboard")]
-        public async Task<IActionResult> GetDashboard()
-        {
-            try
+        // GET /api/driver/dashboard - Get full dashboard data
+[HttpGet("dashboard")]
+public async Task<IActionResult> GetDashboard()
+{
+    try
+    {
+        int driverId = GetDriverIdFromToken();
+
+        var driver = await _context.Drivers
+            .Where(d => d.DriverId == driverId)
+            .FirstOrDefaultAsync();
+
+        if (driver == null) return NotFound(new { message = "Driver not found" });
+
+        // Get all attendance records for this driver and filter in memory
+        var allAttendance = await _context.Attendances
+            .Where(a => a.DriverId == driverId)
+            .ToListAsync();
+
+        var today = DateTime.UtcNow.Date;
+        var attendance = allAttendance.FirstOrDefault(a => a.Date.Date == today);
+
+        // ✅ Include Load to access all load details
+        var allAssignments = await _context.ShiftAssignments
+            .Include(s => s.Load)
+            .Where(s => s.DriverId == driverId)
+            .ToListAsync();
+
+        // ✅ Updated: Now returns LoadResponseDto with full load details
+        var assignments = allAssignments
+            .Where(s => s.AssignedDate.Date == today)
+            .Select(s => new
             {
-                int driverId = GetDriverIdFromToken();
-
-                var driver = await _context.Drivers
-                    .Where(d => d.DriverId == driverId)
-                    .FirstOrDefaultAsync();
-
-                if (driver == null) return NotFound(new { message = "Driver not found" });
-
-                var allAttendance = await _context.Attendances
-                    .Where(a => a.DriverId == driverId)
-                    .ToListAsync();
-
-                var today = DateTime.UtcNow.Date;
-                var attendance = allAttendance.FirstOrDefault(a => a.Date.Date == today);
-
-                var allAssignments = await _context.ShiftAssignments
-                    .Include(s => s.Load)
-                    .Where(s => s.DriverId == driverId)
-                    .ToListAsync();
-
-                var assignments = allAssignments
-                    .Where(s => s.AssignedDate.Date == today)
-                    .Select(s => new AssignmentDto
-                    {
-                        AssignmentId = s.AssignmentId,
-                        LoadId = s.LoadId ?? 0,
-                        LoadRef = s.LoadRef,
-                        Status = s.Status
-                    }).ToList();
-
-                var dto = new DriverDashboardDto
+                AssignmentId = s.AssignmentId,
+                Status = s.Status,
+                LoadDetails = s.Load == null ? null : new LoadResponseDto
                 {
-                    DriverId = driver.DriverId,
-                    Name = driver.Name,
-                    Phone = driver.Phone,
-                    Email = driver.Email ?? "",
-                    Region = driver.Region,
-                    VehicleType = driver.VehicleType,
-                    WeeklyOff = driver.WeeklyOff,
-                    Status = driver.Status,
-                    FatigueScore = (int)driver.FatigueScore,
-                    TodayAttendance = attendance == null ? null : new AttendanceSummaryDto
-                    {
-                        AttendanceId = attendance.AttendanceId,
-                        CheckInTime = attendance.CheckInTime,
-                        CheckOutTime = attendance.CheckOutTime,
-                        TotalHours = attendance.TotalHours,
-                        IsAbsent = attendance.IsAbsent
-                    },
-                    Assignments = assignments
-                };
+                    LoadId = s.Load.LoadId,
+                    LoadRef = s.Load.LoadRef,
+                    Region = s.Load.Region,
+                    Stops = s.Load.Stops,
+                    EstimatedHours = s.Load.EstimatedHours,
+                    EstimatedDistance = s.Load.EstimatedDistance,
+                    Priority = s.Load.Priority,
+                    Status = s.Load.Status,
+                    AssignedDriverId = s.Load.AssignedDriverId,
+                    AssignedDriverName = s.Load.AssignedDriver?.Name,
+                    AssignedAt = s.Load.AssignedAt,
+                    CreatedAt = s.Load.CreatedAt
+                }
+            }).ToList();
 
-                return Ok(dto);
-            }
-            catch (Exception ex)
+        var dto = new
+        {
+            DriverId = driver.DriverId,
+            Name = driver.Name,
+            Phone = driver.Phone,
+            Email = driver.Email ?? "",
+            Region = driver.Region,
+            VehicleType = driver.VehicleType,
+            WeeklyOff = driver.WeeklyOff,
+            Status = driver.Status,
+            FatigueScore = (int)driver.FatigueScore,
+            TodayAttendance = attendance == null ? null : new
             {
-                return StatusCode(500, new { message = "Failed to load dashboard", error = ex.Message });
-            }
-        }
+                AttendanceId = attendance.AttendanceId,
+                CheckInTime = attendance.CheckInTime,
+                CheckOutTime = attendance.CheckOutTime,
+                TotalHours = attendance.TotalHours,
+                IsAbsent = attendance.IsAbsent
+            },
+            Assignments = assignments
+        };
+
+        return Ok(dto);
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { message = "Failed to load dashboard", error = ex.Message });
+    }
+}
 
         // GET /api/driver/attendance/today
         [HttpGet("attendance/today")]
@@ -244,10 +260,10 @@ namespace ShiftSync.Api.Controllers
                 attendance.CheckOutTime = nowUtc;
 
                 // Normalize both as UTC before subtracting to avoid negative/offset issues
-                var checkInUtc = DateTime.SpecifyKind(attendance.CheckInTime.Value, DateTimeKind.Utc);
-                var checkOutUtc = DateTime.SpecifyKind(attendance.CheckOutTime.Value, DateTimeKind.Utc);
+                var checkInUtc = attendance.CheckInTime.Value.ToUniversalTime();
+var checkOutUtc = attendance.CheckOutTime.Value.ToUniversalTime();
 
-                var totalHoursDouble = (checkOutUtc - checkInUtc).TotalHours;
+var totalHoursDouble = (checkOutUtc - checkInUtc).TotalHours;
                 if (totalHoursDouble < 0)
                 {
                     totalHoursDouble = 0;

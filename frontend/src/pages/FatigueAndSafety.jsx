@@ -548,7 +548,6 @@ function FatigueSafety() {
                   <th>Region</th>
                   <th>Fatigue Score</th>
                   <th>Level</th>
-                  <th>Consecutive Days</th>
                   <th>Last Assignment</th>
                   <th>Recommendation</th>
                   <th>Action</th>
@@ -598,14 +597,6 @@ function FatigueSafety() {
                         </div>
                       </td>
                       <td><FatiguePill level={driver.fatigueLevel} /></td>
-                      <td>
-                        <span style={{
-                          fontWeight: driver.consecutiveDays >= 6 ? 600 : 400,
-                          color: driver.consecutiveDays >= 6 ? "#dc2626" : "#374151"
-                        }}>
-                          {driver.consecutiveDays} days
-                        </span>
-                      </td>
                       <td style={{ color: "#6b7280" }}>
                         {driver.lastAssignmentDate
                           ? new Date(driver.lastAssignmentDate).toLocaleDateString()
