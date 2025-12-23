@@ -1,0 +1,19 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=your-rds-endpoint.rds.amazonaws.com;Port=5432;Database=shiftsync;Username=postgres;Password=YOUR_RDS_PASSWORD"
+  },
+  "Jwt": {
+    "Key": "YOUR_SECURE_JWT_KEY_MIN_32_CHARS_LONG",
+    "Issuer": "ShiftSync",
+    "Audience": "ShiftSyncClient",
+    "ExpireMinutes": "1440"
+  },
+  "Cors": {
+    "AllowedOrigins": ["http://your-s3-bucket.s3-website.ap-south-1.amazonaws.com"]
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information"
+    }
+  }
+}

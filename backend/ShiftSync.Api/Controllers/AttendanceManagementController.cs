@@ -143,28 +143,40 @@ namespace ShiftSync.Api.Controllers
         }
 
         // GET: api/admin/attendance/stats
-        // Computes stats from ALL attendance rows (no date filter for now)
+        // Computes stats from TODAY's attendance rows only
         [HttpGet("stats")]
         public async Task<ActionResult<AttendanceStatsDto>> GetStats()
         {
-            var attendances = await _context.Attendances.ToListAsync();
-            var totalDrivers = await _context.Drivers.CountAsync();
+            var today = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+
+            // Get all attendance and filter to today in memory (to avoid PostgreSQL DateTime issues)
+            var allAttendances = await _context.Attendances.ToListAsync();
+            var todayAttendances = allAttendances.Where(a => a.Date.Date == today.Date).ToList();
+
+            var totalDrivers = await _context.Drivers.CountAsync(d => d.Status == "ACTIVE");
+
+            // Count distinct drivers who are present today (to avoid duplicates causing negative values)
+            var presentDriverIds = todayAttendances
+                .Where(a => !a.IsAbsent && a.CheckInTime != null)
+                .Select(a => a.DriverId)
+                .Distinct()
+                .Count();
 
             var stats = new AttendanceStatsDto
             {
                 TotalDrivers = totalDrivers,
-                PresentCount = attendances.Count(a => !a.IsAbsent && a.CheckInTime != null),
-                AbsentCount = totalDrivers - attendances.Count(a => !a.IsAbsent),
-                LateCheckIns = attendances.Count(a =>
+                PresentCount = presentDriverIds,
+                AbsentCount = Math.Max(0, totalDrivers - presentDriverIds), // Ensure never negative
+                LateCheckIns = todayAttendances.Count(a =>
                     !a.IsAbsent &&
                     a.CheckInTime != null &&
                     a.CheckInTime.Value.TimeOfDay > new TimeSpan(9, 0, 0)),
-                MissingCheckOuts = attendances.Count(a =>
+                MissingCheckOuts = todayAttendances.Count(a =>
                     !a.IsAbsent &&
                     a.CheckInTime != null &&
                     a.CheckOutTime == null),
-                OvertimeCount = attendances.Count(a => a.IsOvertime),
-                PendingOvertimeApprovals = attendances.Count(a =>
+                OvertimeCount = todayAttendances.Count(a => a.IsOvertime),
+                PendingOvertimeApprovals = todayAttendances.Count(a =>
                     a.IsOvertime && a.OvertimeApproved == null)
             };
 

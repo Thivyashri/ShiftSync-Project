@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FiPlus, FiChevronDown, FiX, FiUpload } from "react-icons/fi";
 
 // =================== API CONFIG =================== //
-const API_BASE = "http://localhost:5028/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5028/api";
 
 // =================== BADGE COMPONENTS =================== //
 function StatusBadge({ label, tone }) {
@@ -155,6 +155,24 @@ function LoadManagement() {
   ];
 }, [allRegions]);
 
+  // Fetch all regions once on mount
+  useEffect(() => {
+    const fetchRegions = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/Loads`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const uniqueRegions = [...new Set(data.map(l => l.region).filter(Boolean))].sort();
+            setAllRegions(uniqueRegions);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch regions", e);
+      }
+    };
+    fetchRegions();
+  }, []);
 
   useEffect(() => {
     if (regionFilter !== "All Regions") {
@@ -731,9 +749,9 @@ function LoadManagement() {
 // =================== SMALL COMPONENTS =================== //
 function StatCard({ title, value }) {
   return (
-    <div style={{ flex: "1 1 160px", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
+    <div style={{ flex: "1 1 160px", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, backgroundColor: "#ffffff" }}>
       <div style={{ fontSize: 12, color: "#6b7280" }}>{title}</div>
-      <div style={{ fontSize: 22, fontWeight: 700 }}>{value ?? 0}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>{value ?? 0}</div>
     </div>
   );
 }

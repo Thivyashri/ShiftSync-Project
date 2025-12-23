@@ -43,10 +43,13 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// CORS for local frontend dev
+// CORS - configurable for local dev and production (S3)
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:5173" };
+
 builder.Services.AddCors(p => p.AddPolicy("CorsPolicy", policy =>
 {
-    policy.WithOrigins("http://localhost:5173")
+    policy.WithOrigins(allowedOrigins)
           .AllowAnyHeader()
           .AllowAnyMethod()
           .AllowCredentials();

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import api from "../services/api";
 
 export default function Signin() {
   const navigate = useNavigate();
@@ -108,13 +109,10 @@ export default function Signin() {
     }
 
     try {
-      const response = await axios.post(
-        "http://localhost:5028/api/auth/login",
-        {
-          username,
-          password,
-        }
-      );
+      const response = await api.post("/auth/login", {
+        username,
+        password,
+      });
 
       const { token, user } = response.data;
 

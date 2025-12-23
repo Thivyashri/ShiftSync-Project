@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import api from "../services/api";
 import {
   FiKey,
   FiArrowLeft,
@@ -124,17 +124,7 @@ export default function ResetPassword() {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-
-      await axios.post(
-        "http://localhost:5028/api/auth/driver-reset-password",
-        { oldPassword, newPassword },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      await api.post("/auth/driver-reset-password", { oldPassword, newPassword });
 
       setSuccess("Password updated successfully!");
       setTimeout(() => navigate("/driver-dashboard"), 1500);
