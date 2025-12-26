@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  FiClock, FiPackage, FiActivity, FiMapPin, FiLogOut, FiTruck, FiKey,
+  FiClock, FiPackage, FiActivity, FiMapPin, FiLogOut, FiKey,
   FiRefreshCw, FiAlertCircle, FiCheckCircle, FiX, FiInfo
 } from "react-icons/fi";
+
 import { useNavigate } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import {
@@ -381,12 +382,12 @@ function DriverDashboard() {
         flexWrap: "wrap", gap: "12px"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{
-            width: "36px", height: "36px", borderRadius: "8px", background: "#111827",
-            display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "18px"
-          }}>
-            <FiTruck />
-          </div>
+         <div style={{
+  width: "36px", height: "36px", borderRadius: "8px", background: "#111827",
+  display: "flex", alignItems: "center", justifyContent: "center", color: "#fff"
+}}>
+  <img src="/truck.png" alt="truck" style={{ width: "24px", height: "24px" }} />
+</div>
           <span style={{ fontSize: "18px", fontWeight: "600", color: "#111827" }}>ShiftSync</span>
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -453,7 +454,13 @@ function DriverDashboard() {
         gap: "12px",
         marginBottom: "24px"
       }}>
-        <StatCard label="Vehicle Type" value={vehicleType} icon={FiTruck} variant="default" />
+        <StatCard 
+  label="Vehicle Type" 
+  value={vehicleType} 
+  icon={() => <img src="/truck.png" alt="truck" style={{ width: "24px", height: "24px" }} />} 
+  variant="default" 
+/>
+
         <StatCard label="Region" value={region} icon={FiMapPin} variant="blue" />
         <StatCard label="Weekly Off" value={weeklyOff} icon={FiClock} variant="default" />
         <StatCard
