@@ -4,7 +4,6 @@ const TABS = [
   { id: "attendance", label: "Attendance" },
   { id: "load-history", label: "Load History" },
   { id: "fatigue-trends", label: "Fatigue Trends" },
-  { id: "work-hours", label: "Work Hours" },
 ];
 
 function ReportTabs({ active = "attendance", onChange }) {

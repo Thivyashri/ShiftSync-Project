@@ -20,7 +20,6 @@ function Reports() {
   const [attendanceData, setAttendanceData] = useState({ report: [], totalDrivers: 0 });
   const [workloadData, setWorkloadData] = useState({ report: [], totalDrivers: 0 });
   const [fatigueData, setFatigueData] = useState({ drivers: [], fatigueDistribution: {}, overtimeStats: {} });
-  const [workHoursData, setWorkHoursData] = useState({ report: [], summary: {} });
 
   // Calculate date range
   const getDateParams = () => {
@@ -70,11 +69,6 @@ function Reports() {
           setFatigueData(res.data);
           break;
         }
-        case "work-hours": {
-          const res = await reportService.getWorkHoursReport(params);
-          setWorkHoursData(res.data);
-          break;
-        }
       }
     } catch (err) {
       console.error("Failed to fetch report data:", err);
@@ -105,10 +99,6 @@ function Reports() {
       case "fatigue-trends":
         data = fatigueData.drivers;
         filename = "fatigue_report";
-        break;
-      case "work-hours":
-        data = workHoursData.report;
-        filename = "work_hours_report";
         break;
     }
 
@@ -373,86 +363,6 @@ function Reports() {
     </>
   );
 
-  const renderWorkHours = () => (
-    <>
-      {/* Summary */}
-      <section className="card panel" style={{ marginBottom: "24px" }}>
-        <div className="panel-header">
-          <h2 className="section-title">Work Hours Summary</h2>
-        </div>
-        <div style={{ display: "flex", gap: "48px", padding: "16px 0" }}>
-          <div>
-            <span style={{ color: "#6b7280", fontSize: "14px" }}>Total Drivers</span>
-            <div style={{ fontSize: "24px", fontWeight: 600 }}>{workHoursData.summary?.totalDrivers || 0}</div>
-          </div>
-          <div>
-            <span style={{ color: "#6b7280", fontSize: "14px" }}>Total Hours Worked</span>
-            <div style={{ fontSize: "24px", fontWeight: 600 }}>{workHoursData.summary?.totalHoursWorked || 0}h</div>
-          </div>
-          <div>
-            <span style={{ color: "#6b7280", fontSize: "14px" }}>Total Overtime</span>
-            <div style={{ fontSize: "24px", fontWeight: 600, color: "#dc2626" }}>{workHoursData.summary?.totalOvertimeHours || 0}h</div>
-          </div>
-          <div>
-            <span style={{ color: "#6b7280", fontSize: "14px" }}>Avg Hours/Driver</span>
-            <div style={{ fontSize: "24px", fontWeight: 600 }}>{workHoursData.summary?.averageHoursPerDriver || 0}h</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Detailed Table */}
-      <section className="card panel">
-        <div className="panel-header">
-          <h2 className="section-title">Driver Work Hours</h2>
-        </div>
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Driver</th>
-                <th>Region</th>
-                <th>Days Worked</th>
-                <th>Total Hours</th>
-                <th>Regular Hours</th>
-                <th>Overtime Hours</th>
-                <th>Avg Hours/Day</th>
-                <th>Earliest In</th>
-                <th>Latest Out</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(workHoursData.report || []).length === 0 ? (
-                <tr>
-                  <td colSpan="9" style={{ textAlign: "center", padding: "32px", color: "#6b7280" }}>
-                    No work hours data for selected period
-                  </td>
-                </tr>
-              ) : (
-                workHoursData.report.map((row) => (
-                  <tr key={row.driverId}>
-                    <td style={{ fontWeight: 500 }}>{row.name}</td>
-                    <td>{row.region}</td>
-                    <td>
-                      <CountPill value={row.daysWorked} variant="dark" />
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{row.totalHours}h</td>
-                    <td style={{ color: "#16a34a" }}>{row.regularHours}h</td>
-                    <td style={{ color: row.overtimeHours > 0 ? "#dc2626" : "#6b7280", fontWeight: row.overtimeHours > 0 ? 600 : 400 }}>
-                      {row.overtimeHours}h
-                    </td>
-                    <td>{row.averageHoursPerDay}h</td>
-                    <td>{row.earliestCheckIn}</td>
-                    <td>{row.latestCheckOut}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </>
-  );
-
   return (
     <div className="reports-page">
       <header className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -525,7 +435,6 @@ function Reports() {
           {activeTab === "attendance" && renderAttendanceReport()}
           {activeTab === "load-history" && renderWorkloadReport()}
           {activeTab === "fatigue-trends" && renderFatigueTrends()}
-          {activeTab === "work-hours" && renderWorkHours()}
         </>
       )}
     </div>
