@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import api from "../services/api";
+import TruckImage from "../assets/Truck.png";
+console.log(TruckImage);
+
 
 export default function Signin() {
   const navigate = useNavigate();
@@ -163,7 +166,7 @@ export default function Signin() {
       <div className="ss-center-wrap">
         <header className="ss-header">
           <img
-            src="src/assets/truck.png"
+            src={TruckImage}
             alt="truck"
             className="ss-truck-inline"
           />
